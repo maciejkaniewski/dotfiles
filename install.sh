@@ -340,6 +340,58 @@ uv_tool_version() {
   uv tool list 2>/dev/null | awk -v p="$1" '$1 == p { sub(/^v/, "", $2); print $2 }'
 }
 
+# ── Tool versions ──────────────────────────────────────────────────────────────
+# The repo's versions file names the exact version --setup installs for each
+# tool it lists, matching the firmware release CI image. A key in
+# ~/.config/dotfiles/versions overrides it on one machine, and "latest" in
+# either file tracks upstream instead.
+VERSIONS_FILE="$DOTFILES/versions"
+VERSIONS_LOCAL="$HOME/.config/dotfiles/versions"
+
+# Prints the pinned version for key $1, or nothing when it tracks latest.
+tool_pin() {
+  local f v=""
+  for f in "$VERSIONS_LOCAL" "$VERSIONS_FILE"; do
+    [[ -f "$f" ]] || continue
+    v=$(awk -F= -v k="$1" '{ sub(/#.*/, ""); gsub(/[[:space:]]/, "") } $1 == k { print $2; exit }' "$f")
+    [[ -n "$v" ]] && break
+  done
+  [[ "$v" == latest ]] || printf '%s' "$v"
+}
+
+# The installed version of a pinnable tool, in the spelling the versions file
+# uses, or nothing when it isn't installed. The Arm toolchain is read from its
+# own path first: /opt/arm-gcc/bin reaches PATH only through the
+# /usr/local/bin links this script makes.
+tool_installed_version() {
+  local armgcc=/opt/arm-gcc/bin/arm-none-eabi-gcc v=""
+  case "$1" in
+    arm-gcc)
+      [[ -x "$armgcc" ]] || armgcc=$(command -v arm-none-eabi-gcc)
+      [[ -n "$armgcc" ]] && v=$("$armgcc" --version 2>/dev/null | head -1 | grep -ioP '\d+\.\d+\.rel\d+') ;;
+    cmake) command_exists cmake && v=$(cmake --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+') ;;
+    ninja) command_exists ninja && v=$(ninja --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+') ;;
+    uv)    command_exists uv && v=$(uv --version 2>/dev/null | awk '{print $2}') ;;
+  esac
+  printf '%s' "${v,,}"
+}
+
+# Whether a tool needs installing: $1 label, $2 installed version (empty when
+# none), $3 target version, $4 non-empty when the target is a pin. A pin is met
+# only by that exact version, so it can move down as well as up; otherwise only
+# a newer release counts. Logs the skip or the move; returns 1 for a skip.
+needs_install() {
+  local label="$1" have="$2" want="$3" pinned="$4"
+  [[ -n "$have" ]] || return 0
+  if [[ -n "$pinned" ]]; then
+    [[ "$have" == "$want" ]] && { log_skip "$label $have (pinned)"; return 1; }
+    log_warn "$label $have → switching to pinned $want"
+    return 0
+  fi
+  version_lt "$have" "$want" || { log_skip "$label $have"; return 1; }
+  log_warn "$label $have → upgrading to $want"
+}
+
 # Removes ~/.local/bin/<tool> when it's a leftover symlink into Neovim's Mason
 # tree. These stray shims only shadow the uv/GitHub copies install.sh puts on the global PATH for Zed + CLI.
 unshadow_mason() {
@@ -880,23 +932,14 @@ install_duf() {
 # at runtime), not a standalone binary — installed under /opt and symlinked,
 # same pattern as Neovim's release tarball below.
 install_cmake() {
-  local latest
-  run_spin_capture "checking latest version..." latest github_latest "Kitware/CMake"
+  local pin latest have
+  pin=$(tool_pin cmake) latest=$pin have=$(tool_installed_version cmake)
+  [[ -n "$pin" ]] || run_spin_capture "checking latest version..." latest github_latest "Kitware/CMake"
   if [[ -z "$latest" ]]; then
-    if command_exists cmake; then
-      log_skip "CMake $(cmake --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+') (could not check latest)"; return
-    else
-      log_error "CMake" "could not resolve latest version"; return
-    fi
+    [[ -n "$have" ]] && { log_skip "CMake $have (could not check latest)"; return; }
+    log_error "CMake" "could not resolve latest version"; return
   fi
-  if command_exists cmake; then
-    local v; v=$(cmake --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+')
-    if version_lt "$v" "$latest"; then
-      log_warn "CMake $v → upgrading to $latest"
-    else
-      log_skip "CMake $v"; return
-    fi
-  fi
+  needs_install "CMake" "$have" "$latest" "$pin" || return
   local dir="cmake-${latest}-linux-${ARCH_GENERIC}"
   local tgz="/tmp/${dir}.tar.gz"
   local url="https://github.com/Kitware/CMake/releases/download/v${latest}/${dir}.tar.gz"
@@ -946,38 +989,21 @@ arm_gcc_link_tools() {
 # path /opt/arm-gcc, since that's what Neovim's and Zed's clangd
 # --query-driver flags already hardcode (lsp-config.lua, zed/settings.json).
 install_arm_gcc() {
-  local latest
-  run_spin_capture "checking latest version..." latest arm_gcc_latest
-  # Resolve the installed toolchain by its own known path, NOT via PATH.
-  # /opt/arm-gcc/bin only reaches PATH through .zshrc, so a shell started
-  # before the first install — or any non-interactive run (cron, bash -c,
-  # CI) — sees no arm-none-eabi-gcc and re-downloads the whole tarball on
-  # every single run. Falling back to PATH keeps a toolchain installed
-  # somewhere else still detectable.
-  local armgcc=""
-  if [[ -x /opt/arm-gcc/bin/arm-none-eabi-gcc ]]; then
-    armgcc=/opt/arm-gcc/bin/arm-none-eabi-gcc
-  elif command_exists arm-none-eabi-gcc; then
-    armgcc=$(command -v arm-none-eabi-gcc)
-  fi
+  local pin latest have
+  pin=$(tool_pin arm-gcc) latest=$pin have=$(tool_installed_version arm-gcc)
+  [[ -n "$pin" ]] || run_spin_capture "checking latest version..." latest arm_gcc_latest
+  latest=${latest,,}
+  # The skip paths relink too: see arm_gcc_link_tools.
   if [[ -z "$latest" ]]; then
-    if [[ -n "$armgcc" ]]; then
-      [[ "$armgcc" == /opt/arm-gcc/* ]] && arm_gcc_link_tools
-      log_skip "ARM GNU Toolchain $("$armgcc" --version 2>/dev/null | head -1 | grep -ioP '\d+\.\d+\.rel\d+') (could not check latest)"; return
-    else
-      log_error "ARM GNU Toolchain" "could not resolve latest version"; return
+    if [[ -n "$have" ]]; then
+      [[ -x /opt/arm-gcc/bin/arm-none-eabi-gcc ]] && arm_gcc_link_tools
+      log_skip "ARM GNU Toolchain $have (could not check latest)"; return
     fi
+    log_error "ARM GNU Toolchain" "could not resolve latest version"; return
   fi
-  local latest_lc="${latest,,}"
-  if [[ -n "$armgcc" ]]; then
-    local v; v=$("$armgcc" --version 2>/dev/null | head -1 | grep -ioP '\d+\.\d+\.rel\d+')
-    local v_lc="${v,,}"
-    if version_lt "$v_lc" "$latest_lc"; then
-      log_warn "ARM GNU Toolchain $v → upgrading to $latest"
-    else
-      [[ "$armgcc" == /opt/arm-gcc/* ]] && arm_gcc_link_tools
-      log_skip "ARM GNU Toolchain $v"; return
-    fi
+  if ! needs_install "ARM GNU Toolchain" "$have" "$latest" "$pin"; then
+    [[ -x /opt/arm-gcc/bin/arm-none-eabi-gcc ]] && arm_gcc_link_tools
+    return
   fi
   local name="arm-gnu-toolchain-${latest}-${ARCH_GENERIC}-arm-none-eabi"
   local txz="/tmp/${name}.tar.xz"
@@ -1018,10 +1044,41 @@ install_arm_gcc() {
 LLVM_PIN_FILE="$HOME/.config/llvm/version"
 
 # Empty output means "track latest", which is the default for an unpinned box.
+# The per-machine file wins over the versions file; "latest" in it overrides a
+# pin there.
 llvm_pin() {
-  [[ -f "$LLVM_PIN_FILE" ]] || return 0
-  local v; read -r v < "$LLVM_PIN_FILE" 2>/dev/null
+  local v
+  if [[ -f "$LLVM_PIN_FILE" ]]; then
+    read -r v < "$LLVM_PIN_FILE" 2>/dev/null
+  else
+    v=$(tool_pin llvm)
+  fi
   [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && printf '%s' "$v"
+}
+
+# Where the active pin comes from, for the status lines.
+llvm_pin_source() {
+  # shellcheck disable=SC2088  # a label for the log, not a path to expand
+  [[ -f "$LLVM_PIN_FILE" ]] && { printf '%s' "~/${LLVM_PIN_FILE#"$HOME"/}"; return; }
+  printf 'dotfiles versions file'
+}
+
+# LLVM's 18.x and older Linux builds were made on Ubuntu 18.04 and link
+# libtinfo.so.5, which Ubuntu stopped shipping in 24.04. Without it clang,
+# clangd and libclang all fail to load. Ubuntu 22.04's libtinfo5 depends only
+# on libc6, so that one .deb brings it back; the newest one in the pool is
+# picked, since older builds drop out of it.
+llvm_ensure_tinfo5() {
+  ldd /opt/llvm/bin/clang 2>/dev/null | grep -q 'libtinfo.so.5 => not found' || return 0
+  local pool=https://archive.ubuntu.com/ubuntu/pool/universe/n/ncurses
+  [[ "$ARCH_DEB" == arm64 ]] && pool=https://ports.ubuntu.com/ubuntu-ports/pool/universe/n/ncurses
+  local deb_name deb="$SCRIPT_TMPDIR/libtinfo5.deb"
+  deb_name=$(curl -fsSL "$pool/" 2>/dev/null | grep -oP "libtinfo5_6\.3-[^\"]+_${ARCH_DEB}\.deb" | sort -uV | tail -1)
+  [[ -n "$deb_name" ]] || { log_error "libtinfo5" "not found in $pool — clang from /opt/llvm will not start"; return; }
+  run_spin "installing $deb_name (LLVM 18 and older need it)..." \
+    bash -c "curl -fsSL '$pool/$deb_name' -o '$deb' && sudo dpkg -i '$deb' && rm -f '$deb'" \
+    && log_ok "libtinfo5 installed for LLVM" \
+    || log_error "libtinfo5" "install failed — clang from /opt/llvm will not start"
 }
 
 # Turns what the user typed into an exact x.y.z. "latest" asks GitHub; a bare
@@ -1230,7 +1287,9 @@ install_llvm_clang_tools() {
   # than a reason to skip. version_lt is still what phrases the unpinned case,
   # where the only legitimate move is forwards.
   if [[ "$installed" == "$want" ]]; then
-    log_skip "LLVM/Clang tools $installed${pin:+ (pinned)}"; return
+    log_skip "LLVM/Clang tools $installed${pin:+ (pinned)}"
+    llvm_ensure_tinfo5
+    return
   fi
   if [[ -n "$installed" ]]; then
     if [[ -n "$pin" ]]; then
@@ -1266,6 +1325,7 @@ llvm_activate() {
       || { log_error "LLVM/Clang tools" "could not switch to $want"; return; }
     llvm_link_tools || { log_error "LLVM/Clang tools" "switched to $want but relinking /usr/local/bin failed"; return; }
     log_ok "LLVM/Clang tools $want active (already on disk, no download)"
+    llvm_ensure_tinfo5
     llvm_report_prune
     return
   fi
@@ -1325,6 +1385,7 @@ llvm_activate() {
     || { log_error "LLVM/Clang tools" "could not repoint /opt/llvm at $want"; return; }
   llvm_link_tools || { log_error "LLVM/Clang tools" "$want extracted but relinking /usr/local/bin failed"; return; }
   log_ok "LLVM/Clang tools $want installed"
+  llvm_ensure_tinfo5
   llvm_report_prune
 }
 
@@ -1370,23 +1431,14 @@ install_btop() {
 }
 
 install_ninja() {
-  local latest
-  run_spin_capture "checking latest version..." latest github_latest "ninja-build/ninja"
+  local pin latest have
+  pin=$(tool_pin ninja) latest=$pin have=$(tool_installed_version ninja)
+  [[ -n "$pin" ]] || run_spin_capture "checking latest version..." latest github_latest "ninja-build/ninja"
   if [[ -z "$latest" ]]; then
-    if command_exists ninja; then
-      log_skip "ninja $(ninja --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+') (could not check latest)"; return
-    else
-      log_error "ninja" "could not resolve latest version"; return
-    fi
+    [[ -n "$have" ]] && { log_skip "ninja $have (could not check latest)"; return; }
+    log_error "ninja" "could not resolve latest version"; return
   fi
-  if command_exists ninja; then
-    local v; v=$(ninja --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+')
-    if version_lt "$v" "$latest"; then
-      log_warn "ninja $v → upgrading to $latest"
-    else
-      log_skip "ninja $v"; return
-    fi
-  fi
+  needs_install "ninja" "$have" "$latest" "$pin" || return
   local zip="/tmp/ninja_${latest}.zip"
   run_spin "downloading ninja $latest..." \
     curl -fsSL "https://github.com/ninja-build/ninja/releases/download/v${latest}/ninja-linux${ARCH_NINJA}.zip" -o "$zip" \
@@ -1770,29 +1822,23 @@ install_omz_plugins() {
 # files (~/.zshrc is a symlink into this repo, and ~/.local/bin is already on
 # PATH there).
 install_uv() {
-  local latest
-  run_spin_capture "checking latest version..." latest github_latest "astral-sh/uv"
+  local pin latest have
+  pin=$(tool_pin uv) latest=$pin have=$(tool_installed_version uv)
+  [[ -n "$pin" ]] || run_spin_capture "checking latest version..." latest github_latest "astral-sh/uv"
   if [[ -z "$latest" ]]; then
-    if command_exists uv; then
-      log_skip "uv $(uv --version 2>/dev/null | awk '{print $2}') (could not check latest)"; return
-    else
-      log_error "uv" "could not resolve latest version"; return
-    fi
+    [[ -n "$have" ]] && { log_skip "uv $have (could not check latest)"; return; }
+    log_error "uv" "could not resolve latest version"; return
   fi
-  if command_exists uv; then
-    local v; v=$(uv --version 2>/dev/null | awk '{print $2}')
-    if version_lt "$v" "$latest"; then
-      log_warn "uv $v → upgrading to $latest"
-      run_spin "upgrading uv to $latest..." uv self update \
-        && log_ok "uv $latest installed" \
-        || log_error "uv" "upgrade failed (installed some way other than the standalone installer?)"
-    else
-      log_skip "uv $v"
-    fi
+  needs_install "uv" "$have" "$latest" "$pin" || return
+  if [[ -n "$have" ]]; then
+    # self update takes a target version, and moves down to it as well as up
+    run_spin "moving uv to $latest..." uv self update "$latest" \
+      && log_ok "uv $latest installed" \
+      || log_error "uv" "update failed (installed some way other than the standalone installer?)"
     return
   fi
   run_spin "installing uv $latest..." \
-    bash -c "curl -LsSf https://astral.sh/uv/install.sh | UV_NO_MODIFY_PATH=1 sh" \
+    bash -c "curl -LsSf https://astral.sh/uv/$latest/install.sh | UV_NO_MODIFY_PATH=1 sh" \
     && log_ok "uv $latest installed" \
     || log_error "uv" "install failed"
 }
@@ -1803,22 +1849,32 @@ install_uv() {
 # drop_mason_package / unshadow_mason clear what an older setup left behind.
 #
 # Python tools come from `uv tool`, so uv is the only Python installer here.
-# `uv tool upgrade` is a no-op when current, so no latest-version lookup is
-# needed. --force on the first install lets uv take over a shim left by an
-# earlier pipx install, which uv otherwise refuses to overwrite.
+# A tool in the versions file is installed at exactly that version. Otherwise
+# `uv tool install --upgrade` moves it to the newest release; unlike `uv tool
+# upgrade`, it also drops a ==pin the tool was installed with before. --force
+# lets uv take over a shim left by an earlier pipx install, which uv otherwise
+# refuses to overwrite.
 install_uv_tool() {
   local pkg="$1" label="$2" before after
   unshadow_mason "$pkg"
   drop_mason_package "$pkg"
   command_exists uv || { log_error "$label" "uv is required (installed in the Python step)"; return; }
   before=$(uv_tool_version "$pkg")
+  local pin; pin=$(tool_pin "$pkg")
+  if [[ -n "$pin" ]]; then
+    [[ "$before" == "$pin" ]] && { log_skip "$label $pin (pinned)"; return; }
+    run_spin "installing $label $pin..." uv tool install --force "$pkg==$pin" \
+      && log_ok "$label ${before:+$before → }$pin (pinned)" \
+      || log_error "$label" "install of $pin failed"
+    return
+  fi
   if [[ -z "$before" ]]; then
     run_spin "installing $label..." uv tool install --force "$pkg" \
       && log_ok "$label $(uv_tool_version "$pkg") installed" \
       || log_error "$label" "install failed"
     return
   fi
-  run_spin "checking $label for updates..." uv tool upgrade "$pkg" \
+  run_spin "checking $label for updates..." uv tool install --force --upgrade "$pkg" \
     || { log_error "$label" "upgrade failed"; return; }
   after=$(uv_tool_version "$pkg")
   if [[ "$before" != "$after" ]]; then
@@ -2195,12 +2251,18 @@ set_default_terminal() {
     || log_warn "could not set default terminal — run manually: gsettings set org.gnome.desktop.default-applications.terminal exec '$kitty_bin'"
 }
 
+# The account's login shell, not $SHELL: $SHELL keeps the old value for the
+# rest of the session, so a re-run before logging out would change it again.
+# Through sudo, whose credential is still cached from the start of --setup:
+# plain chsh asks for the password itself, and with its output hidden that
+# prompt was invisible and the run looked hung.
 set_default_shell() {
   section "Default shell"
-  if [[ "$SHELL" == "$(which zsh)" ]]; then
+  local zsh_bin; zsh_bin=$(command -v zsh)
+  if [[ "$(getent passwd "$USER" | cut -d: -f7)" == "$zsh_bin" ]]; then
     log_skip "Zsh (already default)"; return
   fi
-  if chsh -s "$(which zsh)" &>/dev/null; then
+  if sudo chsh -s "$zsh_bin" "$USER" >/dev/null; then
     log_ok "Zsh set as default shell"
     NEED_RESTART=true
   else
@@ -2256,6 +2318,15 @@ verify_versions() {
   for t in gcc g++ clang clang++ cmake ninja arm-none-eabi-gcc; do
     command_exists "$t" || { echo "$t not found on PATH"; return 1; }
   done
+  # A pin that isn't what's installed means a build here no longer matches
+  # the release image. LLVM's pin is checked in verify_clang_tools.
+  local key pin have off=""
+  for key in arm-gcc cmake ninja uv; do
+    pin=$(tool_pin "$key"); [[ -n "$pin" ]] || continue
+    have=$(tool_installed_version "$key")
+    [[ "$have" == "$pin" ]] || off+="$key ${have:-missing} (pinned $pin), "
+  done
+  [[ -z "$off" ]] || { echo "not at the pinned version: ${off%, } — run ./install.sh --setup"; return 1; }
   local pinned=""; [[ -n "$(llvm_pin)" ]] && pinned=" (pinned)"
   printf 'gcc %s · clang %s%s · cmake %s · ninja %s · arm %s' \
     "$(gcc -dumpfullversion 2>/dev/null)" \
@@ -2498,15 +2569,16 @@ cmd_setup() {
   install_glab
   install_bw
 
+  section "Python"
+  install_uv
+
   section "Build toolchain"
   install_cmake
   install_ninja
+  install_uv_tool meson "Meson"
   install_arm_gcc
   install_llvm_clang_tools
   install_rust
-
-  section "Python"
-  install_uv
 
   section "Editor tooling"
   install_tree_sitter_cli
@@ -2556,7 +2628,7 @@ cmd_setup() {
   if (( FAIL_COUNT > 0 )); then
     echo -e "\r\033[K  ${RED}${BOLD}Done with ${FAIL_COUNT} error(s).${RESET} ${SUBTEXT}See the ✗ lines above; re-run ./install.sh --setup to retry.${RESET}"
   elif [[ "$NEED_RESTART" == true ]]; then
-    echo -e "\r\033[K  ${MAUVE}${BOLD}Done!${RESET} ${YELLOW}Restart your terminal to start using Zsh.${RESET}"
+    echo -e "\r\033[K  ${MAUVE}${BOLD}Done!${RESET} ${YELLOW}Log out and back in, then open Kitty: the new login shell (Zsh) starts with the next session.${RESET}"
   else
     echo -e "\r\033[K  ${MAUVE}${BOLD}Done!${RESET} ${TEXT}Everything is set up.${RESET}"
   fi
@@ -2676,16 +2748,16 @@ cmd_llvm() {
     section "LLVM/Clang tools"
     local active; active=$(llvm_installed_version)
     if [[ -n "$pin" ]]; then
-      log_ok "pinned to $pin (${LLVM_PIN_FILE/#$HOME/~})"
+      log_ok "pinned to $pin ($(llvm_pin_source))"
     else
-      log_skip "tracking latest — no pin, so --setup upgrades to the newest release"
+      log_skip "tracking latest — --setup upgrades to the newest release"
     fi
     # Sized behind a spinner: du over a couple of 12GB trees takes several
     # seconds, and a status command that looks hung is worse than a slow one.
     local listing
     run_spin_capture "measuring LLVM trees under /opt..." listing llvm_status_rows "$active"
     if [[ -z "$listing" ]]; then
-      log_warn "no LLVM tree under /opt — run ./install.sh --llvm latest"
+      log_warn "no LLVM tree under /opt — run ./install.sh --setup"
     else
       local row
       while IFS= read -r row; do
@@ -2709,9 +2781,19 @@ cmd_llvm() {
     return
   fi
 
+  # default drops this machine's override and goes back to the versions file.
+  # Nothing is installed here; the next --setup applies it.
+  if [[ "$spec" == default ]]; then
+    section "LLVM/Clang tools"
+    rm -f "$LLVM_PIN_FILE"
+    pin=$(llvm_pin)
+    log_ok "override removed — ${pin:+pinned to $pin by the }${pin:-tracking latest per the }dotfiles versions file; run ./install.sh --setup to apply"
+    echo; return
+  fi
+
   if [[ ! "$spec" =~ ^(latest|[0-9]+(\.[0-9]+){0,2})$ ]]; then
     section "LLVM/Clang tools"
-    log_error "LLVM/Clang tools" "unrecognised version '$spec' — expected latest, 18, 18.1, 18.1.8, or clean"
+    log_error "LLVM/Clang tools" "unrecognised version '$spec' — expected latest, 18, 18.1, 18.1.8, default, or clean"
     echo; return
   fi
 
@@ -2733,13 +2815,15 @@ cmd_llvm() {
     echo; return
   fi
 
+  # "latest" is written rather than the file removed, because without the
+  # file the versions file's pin applies again.
+  mkdir -p "$(dirname "$LLVM_PIN_FILE")"
   if [[ "$spec" == latest ]]; then
-    rm -f "$LLVM_PIN_FILE"
-    log_ok "tracking latest ($want) — pin cleared"
+    printf 'latest\n' > "$LLVM_PIN_FILE"
+    log_ok "tracking latest ($want) on this machine (~/${LLVM_PIN_FILE#"$HOME"/})"
   else
-    mkdir -p "$(dirname "$LLVM_PIN_FILE")"
     printf '%s\n' "$want" > "$LLVM_PIN_FILE"
-    log_ok "pinned to $want (${LLVM_PIN_FILE/#$HOME/~})"
+    log_ok "pinned to $want (~/${LLVM_PIN_FILE#"$HOME"/})"
   fi
 
   local installed; installed=$(llvm_installed_version)
@@ -2779,13 +2863,18 @@ usage() {
   echo -e "    ${GREEN}./install.sh --llvm${RESET}        ${SUBTEXT}Show the LLVM pin, the active version and what's on disk${RESET}"
   echo -e "    ${GREEN}./install.sh -h, --help${RESET}    ${SUBTEXT}Show this help message${RESET}"
   echo
+  echo -e "  ${TEXT}${BOLD}Tool versions:${RESET}"
+  echo -e "    ${SUBTEXT}LLVM, the Arm toolchain, CMake, Ninja, uv and Ruff are installed at the exact versions${RESET}"
+  echo -e "    ${SUBTEXT}in the repo's versions file. Override one per machine in ~/.config/dotfiles/versions.${RESET}"
+  echo
   echo -e "  ${TEXT}${BOLD}Choosing an LLVM version:${RESET}"
-  echo -e "    ${GREEN}./install.sh --llvm 18.1.8${RESET} ${SUBTEXT}Pin to an exact version (also accepts 18 or 18.1 for newest in that series)${RESET}"
-  echo -e "    ${GREEN}./install.sh --llvm latest${RESET}  ${SUBTEXT}Clear the pin and track the newest release again${RESET}"
+  echo -e "    ${GREEN}./install.sh --llvm 19.1.7${RESET} ${SUBTEXT}Pin this machine to an exact version (also accepts 19 or 19.1 for newest in that series)${RESET}"
+  echo -e "    ${GREEN}./install.sh --llvm latest${RESET}  ${SUBTEXT}Track the newest release on this machine${RESET}"
+  echo -e "    ${GREEN}./install.sh --llvm default${RESET} ${SUBTEXT}Drop the override and follow the versions file again${RESET}"
   echo -e "    ${GREEN}./install.sh --llvm clean${RESET}   ${SUBTEXT}Drop every inactive LLVM tree under /opt${RESET}"
-  echo -e "    ${SUBTEXT}The pin is stored per machine in ~/.config/llvm/version and honoured by --setup,${RESET}"
-  echo -e "    ${SUBTEXT}so a run can't quietly upgrade you off a version your work needs. The previous${RESET}"
-  echo -e "    ${SUBTEXT}version is kept under /opt, so switching back is a symlink repoint, not a download.${RESET}"
+  echo -e "    ${SUBTEXT}The override is stored in ~/.config/llvm/version and honoured by --setup, so a run${RESET}"
+  echo -e "    ${SUBTEXT}can't quietly move you off it. The previous version is kept under /opt, so switching${RESET}"
+  echo -e "    ${SUBTEXT}back is a symlink repoint, not a download.${RESET}"
   echo
   echo -e "  ${TEXT}${BOLD}--setup installs:${RESET}"
   echo -e "    ${TEXT}${BOLD}System${RESET}"

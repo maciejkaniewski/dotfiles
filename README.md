@@ -58,30 +58,50 @@ cd ~/dotfiles
 | `-v`, `--verify` | Check the installed toolchain actually works |
 | `--theme` | Pick or re-apply the color theme and nothing else — the same step `--setup` ends with |
 | `--identity` | Set your git name and email, and pick the personal or work profile (`~/.zshrc.local`, `~/.ssh/config.local`), and nothing else |
-| `--llvm [version]` | Show or change which LLVM/Clang version the toolchain runs — see [Choosing an LLVM version](#choosing-an-llvm-version) |
+| `--llvm [version]` | Show or change which LLVM/Clang version the toolchain runs on this machine — see [Choosing an LLVM version](#choosing-an-llvm-version) |
 | `-h`, `--help` | Show usage |
 
-`--setup` runs `apt update && upgrade`, installs all tools listed below, sets Zsh as the default shell and Kitty as the default terminal. Safe to re-run — every step is skipped if already satisfied. Works from bash on a fresh machine.
+`--setup` runs `apt update && upgrade`, installs all tools listed below, sets Zsh as the default shell and Kitty as the default terminal. Safe to re-run — every step is skipped if already satisfied. Works from bash on a fresh machine; log out and back in afterwards so the session starts with Zsh, then open Kitty. Tested on Ubuntu 24.04 and 26.04.
 
-`--setup` ends with the same checks `--verify` runs on its own. They exercise the tools rather than just looking for them on `PATH` — compile and run C and C++ with both gcc and clang, cross-compile for cortex-m4 and link against newlib, drive `clangd`, build a throwaway CMake project with Ninja, confirm the active LLVM still matches any pin, and scan for dangling symlinks. A failed check is an `✗` line and a non-zero exit, so a run can't report success over a broken toolchain. Needs no sudo.
+`--setup` ends with the same checks `--verify` runs on its own. They exercise the tools rather than just looking for them on `PATH` — compile and run C and C++ with both gcc and clang, cross-compile for cortex-m4 and link against newlib, drive `clangd`, build a throwaway CMake project with Ninja, confirm every tool is at its [pinned version](#pinned-tool-versions), and scan for dangling symlinks. A failed check is an `✗` line and a non-zero exit, so a run can't report success over a broken toolchain. Needs no sudo.
 
 At the end of `--setup` you are asked for your git name and email, which go into `~/.gitconfig.local`, and for a profile (personal or work), which copies the matching `~/.zshrc.local` and `~/.ssh/config.local` templates. The work profile adds an SSH block for machines on the local network. A `~/.zshrc.local` or `~/.ssh/config.local` you have edited is replaced only if you answer yes. None of these files is tracked in dotfiles — they stay machine-local.
 
 **Using these dotfiles yourself** — nothing in the repo is tied to one person. Clone it, run `./install.sh -s`, and enter your own name and email at the Identity step (`./install.sh --identity` changes them later). HTTPS git credentials come from your own Bitwarden vault — see [Bitwarden for git credentials](#bitwarden-for-git-credentials).
 
+### Pinned tool versions
+
+The build toolchain is installed at exact versions, set in [`versions`](versions) at the repo root. They mirror the firmware release CI image, so a local build compiles and formats exactly like a release build:
+
+| Tool | Version | Why exact |
+|---|---|---|
+| LLVM/Clang | 18.1.8 | Release CI accepts only clang-format 18.1.8: other patch levels format the same code differently |
+| Arm GNU Toolchain | 15.3.rel1 (GCC 15.3.1) | The compiler firmware releases are built with |
+| CMake | 4.4.2 | Same as the release image |
+| Ninja | 1.13.2 | Same as the release image |
+| uv | 0.12.15 | Same as the release image |
+| Ruff | 0.16.1 | Formatter output changes between releases |
+
+`--setup` installs each one at exactly that version, moving down as well as up, and `--verify` fails when one has drifted. To change one on a single machine, put the same `key=version` line in `~/.config/dotfiles/versions` (untracked) and re-run `./install.sh --setup`; `latest` tracks upstream instead. Tools not in the file always track the newest release.
+
 ### Choosing an LLVM version
 
-By default the LLVM/Clang step tracks the newest upstream release. When a project only builds with an exact older version, pin it:
+LLVM follows the `llvm=` line in `versions` (18.1.8). `--llvm` overrides it on this machine and installs the result straight away:
 
 ```bash
-./install.sh --llvm              # status: the pin, the active version, what's on disk
-./install.sh --llvm 18.1.8       # pin to an exact version
-./install.sh --llvm 18           # newest patch in the 18.x series (resolves to 18.1.8)
-./install.sh --llvm latest       # clear the pin and track newest again
+./install.sh --llvm              # status: the pin, where it comes from, the active version, what's on disk
+./install.sh --llvm 19.1.7       # pin this machine to an exact version
+./install.sh --llvm 19           # newest patch in the 19.x series
+./install.sh --llvm latest       # track the newest release on this machine
+./install.sh --llvm default      # drop the override and follow the versions file again
 ./install.sh --llvm clean        # drop every inactive tree under /opt
 ```
 
-The pin is stored per machine in `~/.config/llvm/version` — untracked, so a work pin never follows this repo to another box — and every later `./install.sh --setup` honours it instead of quietly upgrading you off it. `--verify` fails if the pin and `/opt/llvm` ever disagree.
+The override is stored in `~/.config/llvm/version` — untracked, so it never follows this repo to another box — and every later `./install.sh --setup` honours it instead of quietly moving you off it. `--verify` fails if the pin and `/opt/llvm` ever disagree.
+
+LLVM 18 and older were built on Ubuntu 18.04 and need `libtinfo.so.5`, which Ubuntu dropped in 24.04. When it is missing, `--setup` installs Ubuntu 22.04's `libtinfo5` package (it depends only on libc), so clang, clangd and libclang start on 24.04 and 26.04 too.
+
+Rust crates that parse C headers (bindgen, clang-sys) load libclang by themselves and would not look in `/opt/llvm`. `.zshrc` sets `LIBCLANG_PATH=/opt/llvm/lib` whenever the `clang` on `PATH` comes from that tree, so the library always matches the driver.
 
 The pinned version owns the whole toolchain on `PATH`: `clang`, `clang++`, `lld`, `ld.lld`, `clangd`, `clang-format`, `clang-tidy` and the `llvm-*` utilities. Both editors invoke bare `clangd` off `PATH`, so they follow the pin with no config changes.
 
@@ -131,24 +151,25 @@ One upstream wrinkle worth knowing about: LLVM renamed its Linux release assets 
 
 | Tool | Version | Description |
 |---|---|---|
-| [CMake](https://cmake.org/) | latest | Cross-platform build system generator (GitHub release) |
-| [ninja](https://github.com/ninja-build/ninja) | latest | Fast build system, used with cmake (GitHub release) |
-| [Arm GNU Toolchain](https://gitlab.arm.com/tooling/gnu-toolchains-for-arm) | latest | Bare-metal `arm-none-eabi-gcc`/`g++`/`gdb`/`objcopy`/etc. cross-toolchain (GitLab generic package — not packaged for apt at all) |
-| [LLVM/Clang tools](https://github.com/llvm/llvm-project) | latest, or pinned | `clangd`, `clang-format`, `clang-tidy`, `clang`, `lld` (GitHub release; ~1-2GB download, 7-12GB extracted — only the entry points are symlinked out of the full LLVM tree, on `PATH` for Zed, Neovim and the CLI). Pin an exact version with `--llvm` — see [Choosing an LLVM version](#choosing-an-llvm-version) |
+| [CMake](https://cmake.org/) | 4.4.2 | Cross-platform build system generator (GitHub release) |
+| [ninja](https://github.com/ninja-build/ninja) | 1.13.2 | Fast build system, used with cmake (GitHub release) |
+| [Meson](https://mesonbuild.com/) | latest | Build system for C projects that use it (`uv tool`; apt's is too old for C23 projects, which need ≥ 1.4) |
+| [Arm GNU Toolchain](https://gitlab.arm.com/tooling/gnu-toolchains-for-arm) | 15.3.rel1 | Bare-metal `arm-none-eabi-gcc`/`g++`/`gdb`/`objcopy`/etc. cross-toolchain (GitLab generic package — not packaged for apt at all) |
+| [LLVM/Clang tools](https://github.com/llvm/llvm-project) | 18.1.8 | `clangd`, `clang-format`, `clang-tidy`, `clang`, `lld` (GitHub release; ~1-2GB download, 7-12GB extracted — only the entry points are symlinked out of the full LLVM tree, on `PATH` for Zed, Neovim and the CLI). Change it with `--llvm` — see [Choosing an LLVM version](#choosing-an-llvm-version) |
 | [Rust](https://www.rust-lang.org/) | stable | `rustc`, `cargo`, `rustfmt`, `clippy` (official rustup installer; also builds the tree-sitter CLI on glibc < 2.39) |
 
 **Python**
 
 | Tool | Version | Description |
 |---|---|---|
-| [uv](https://docs.astral.sh/uv/) | latest | Python versions, projects and virtualenvs — replaces pyenv + Poetry (standalone installer, updates itself with `uv self update`; never edits shell rc files) |
+| [uv](https://docs.astral.sh/uv/) | 0.12.15 | Python versions, projects and virtualenvs — replaces pyenv + Poetry (standalone installer, moved to the pinned version with `uv self update`; never edits shell rc files) |
 
 **Editor tooling**
 
 | Tool | Version | Description |
 |---|---|---|
 | [tree-sitter CLI](https://github.com/tree-sitter/tree-sitter) | latest | Compiles Neovim treesitter parsers. Required by nvim-treesitter `main` (needs ≥ 0.26.1; apt ships 0.20.8, so this is a GitHub release) |
-| [Ruff](https://github.com/astral-sh/ruff) | latest | Python linter/formatter (`uv tool`, on `PATH` for Zed, Neovim and the CLI) |
+| [Ruff](https://github.com/astral-sh/ruff) | 0.16.1 | Python linter/formatter (`uv tool`, on `PATH` for Zed, Neovim and the CLI) |
 | [basedpyright](https://github.com/DetachHead/basedpyright) | latest | Python type checker (`uv tool`, on `PATH` for Zed, Neovim and the CLI) |
 | [StyLua](https://github.com/JohnnyMorganz/StyLua) | latest | Lua formatter (GitHub release, on `PATH` for Zed, Neovim and the CLI) |
 | [shellcheck](https://www.shellcheck.net/) | latest | Lints shell scripts; `--verify` runs it on `install.sh` and fails on any warning (`uv tool`, from the `shellcheck-py` package) |
@@ -1052,5 +1073,13 @@ dotfiles/
 ├── .zshrc
 ├── .zshrc.local.personal
 ├── .zshrc.local.work
-└── install.sh
+├── LICENSE                            # MIT
+├── install.sh
+└── versions                           # exact tool versions --setup installs
 ```
+
+---
+
+## License
+
+[MIT](LICENSE) — fork it, copy from it, change it. The theme files under `.config/` (Catppuccin, Gruvbox, Dracula) come from their upstream projects, which are MIT-licensed too.

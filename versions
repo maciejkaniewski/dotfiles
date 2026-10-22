@@ -1,0 +1,14 @@
+# Tool versions ./install.sh --setup installs exactly, upgrading or downgrading
+# to match. They mirror the firmware release CI image, so a local build uses
+# the same compilers and formatters as a release build.
+#
+# Override any of them on one machine in ~/.config/dotfiles/versions (same
+# format, untracked). "latest" in either file tracks upstream instead. LLVM can
+# also be set with ./install.sh --llvm, which writes ~/.config/llvm/version.
+
+llvm=18.1.8        # clang, clangd, clang-format; release CI accepts only this clang-format
+arm-gcc=15.3.rel1  # Arm GNU Toolchain release; its GCC reports 15.3.1
+cmake=4.4.2
+ninja=1.13.2
+uv=0.12.15
+ruff=0.16.1        # formatter output changes between releases

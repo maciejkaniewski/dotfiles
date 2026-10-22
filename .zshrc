@@ -72,6 +72,11 @@ export PATH="$HOME/.local/kitty.app/bin:$PATH"
 # here would only be visible to interactive shells — not to cron, systemd, CI,
 # or GUI-launched editors — so the symlinks are what make it reliably findable.
 
+# clang-sys (bindgen, and any Rust build that parses C headers) loads libclang
+# on its own and doesn't look in /opt/llvm. Point it there only while the clang
+# on PATH comes from that tree, so the library always matches the driver.
+[[ ${commands[clang]:A} == /opt/* && -e /opt/llvm/lib/libclang.so ]] && export LIBCLANG_PATH=/opt/llvm/lib
+
 [[ -f /etc/zsh_command_not_found ]] && source /etc/zsh_command_not_found
 
 # lazygit theme — merges the base config with the active Catppuccin flavor's
