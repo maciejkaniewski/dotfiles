@@ -10,5 +10,4 @@ llvm=18.1.8        # clang, clangd, clang-format; release CI accepts only this c
 arm-gcc=15.3.rel1  # Arm GNU Toolchain release; its GCC reports 15.3.1
 cmake=4.4.2
 ninja=1.13.2
-uv=0.12.15
-ruff=0.16.1        # formatter output changes between releases
+ruff=0.16.1        # formatter output changes between releases; projects require exactly this one

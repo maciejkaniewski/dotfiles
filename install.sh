@@ -13,6 +13,12 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 DOTFILES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# uv, the uv tools, Zed and Claude Code install into ~/.local/bin, and later
+# steps of the same run call them. A fresh account's login shell puts that
+# directory on PATH only if it existed at login, which on a first run it didn't.
+[[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || export PATH="$HOME/.local/bin:$PATH"
+
 NEED_RESTART=false
 FAIL_COUNT=0
 SUDO_KEEPALIVE_PID=""
@@ -2864,7 +2870,7 @@ usage() {
   echo -e "    ${GREEN}./install.sh -h, --help${RESET}    ${SUBTEXT}Show this help message${RESET}"
   echo
   echo -e "  ${TEXT}${BOLD}Tool versions:${RESET}"
-  echo -e "    ${SUBTEXT}LLVM, the Arm toolchain, CMake, Ninja, uv and Ruff are installed at the exact versions${RESET}"
+  echo -e "    ${SUBTEXT}LLVM, the Arm toolchain, CMake, Ninja and Ruff are installed at the exact versions${RESET}"
   echo -e "    ${SUBTEXT}in the repo's versions file. Override one per machine in ~/.config/dotfiles/versions.${RESET}"
   echo
   echo -e "  ${TEXT}${BOLD}Choosing an LLVM version:${RESET}"

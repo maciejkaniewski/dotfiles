@@ -79,8 +79,7 @@ The build toolchain is installed at exact versions, set in [`versions`](versions
 | Arm GNU Toolchain | 15.3.rel1 (GCC 15.3.1) | The compiler firmware releases are built with |
 | CMake | 4.4.2 | Same as the release image |
 | Ninja | 1.13.2 | Same as the release image |
-| uv | 0.12.15 | Same as the release image |
-| Ruff | 0.16.1 | Formatter output changes between releases |
+| Ruff | 0.16.1 | Formatter output changes between releases, and projects set `required-version` to it |
 
 `--setup` installs each one at exactly that version, moving down as well as up, and `--verify` fails when one has drifted. To change one on a single machine, put the same `key=version` line in `~/.config/dotfiles/versions` (untracked) and re-run `./install.sh --setup`; `latest` tracks upstream instead. Tools not in the file always track the newest release.
 
@@ -162,7 +161,7 @@ One upstream wrinkle worth knowing about: LLVM renamed its Linux release assets 
 
 | Tool | Version | Description |
 |---|---|---|
-| [uv](https://docs.astral.sh/uv/) | 0.12.15 | Python versions, projects and virtualenvs — replaces pyenv + Poetry (standalone installer, moved to the pinned version with `uv self update`; never edits shell rc files) |
+| [uv](https://docs.astral.sh/uv/) | latest | Python versions, projects and virtualenvs — replaces pyenv + Poetry (standalone installer, updates itself with `uv self update`; never edits shell rc files). Not pinned: a newer uv reads older projects fine |
 
 **Editor tooling**
 
