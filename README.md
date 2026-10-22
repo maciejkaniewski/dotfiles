@@ -25,7 +25,7 @@ A development environment with a consistent theme across every tool — pick [Ca
 | Terminal | [Kitty](https://sw.kovidgoyal.net/kitty/) |
 | Shell | [Zsh](https://www.zsh.org/) + [Oh My Zsh](https://ohmyz.sh/) + [Powerlevel10k](https://github.com/romkatv/powerlevel10k) |
 | Editor | [Neovim](https://neovim.io/) with [lazy.nvim](https://github.com/folke/lazy.nvim) |
-| Editor (GUI) | [Zed](https://zed.dev/) (vim mode, Neovim keymap parity) |
+| Editor (GUI) | [Zed](https://zed.dev/) (vim mode, Neovim keymap parity), [VS Code](https://code.visualstudio.com/) |
 | AI | [Claude Code](https://claude.ai/code) |
 | Git pager | [delta](https://github.com/dandavison/delta) |
 | Git TUI | [lazygit](https://github.com/jesseduffield/lazygit) |
@@ -75,7 +75,8 @@ The build toolchain is installed at exact versions, set in [`versions`](versions
 
 | Tool | Version | Why exact |
 |---|---|---|
-| LLVM/Clang | 18.1.8 | Release CI accepts only clang-format 18.1.8: other patch levels format the same code differently |
+| LLVM | 18.1.8 | `clang-format`, `clangd`, `clang-tidy`, `lld`. Firmware builds and release CI accept only clang-format 18.1.8, because other patch levels format the same code differently; Zed formats through clangd, so it stays on 18.1.8 too |
+| clang compiler | 19 | `clang` and `clang++` from apt's `clang-19`, with its libclang for bindgen. C23 code (`constexpr` objects) needs clang 19 or newer |
 | Arm GNU Toolchain | 15.3.rel1 (GCC 15.3.1) | The compiler firmware releases are built with |
 | CMake | 4.4.2 | Same as the release image |
 | Ninja | 1.13.2 | Same as the release image |
@@ -100,9 +101,9 @@ The override is stored in `~/.config/llvm/version` — untracked, so it never fo
 
 LLVM 18 and older were built on Ubuntu 18.04 and need `libtinfo.so.5`, which Ubuntu dropped in 24.04. When it is missing, `--setup` installs Ubuntu 22.04's `libtinfo5` package (it depends only on libc), so clang, clangd and libclang start on 24.04 and 26.04 too.
 
-Rust crates that parse C headers (bindgen, clang-sys) load libclang by themselves and would not look in `/opt/llvm`. `.zshrc` sets `LIBCLANG_PATH=/opt/llvm/lib` whenever the `clang` on `PATH` comes from that tree, so the library always matches the driver.
+Rust crates that parse C headers (bindgen, clang-sys) load libclang by themselves. With the apt compiler they find apt's libclang-19, which matches it. Without a `clang=` line, `.zshrc` sets `LIBCLANG_PATH=/opt/llvm/lib` whenever the `clang` on `PATH` comes from that tree, so the library always matches the driver.
 
-The pinned version owns the whole toolchain on `PATH`: `clang`, `clang++`, `lld`, `ld.lld`, `clangd`, `clang-format`, `clang-tidy` and the `llvm-*` utilities. Both editors invoke bare `clangd` off `PATH`, so they follow the pin with no config changes.
+The pinned version owns `lld`, `ld.lld`, `clangd`, `clang-format`, `clang-tidy` and the `llvm-*` utilities on `PATH`. `clang` and `clang++` come from apt's `clang-19` while `versions` has a `clang=` line; remove it and they come from `/opt/llvm` too. Both editors invoke bare `clangd` off `PATH`, so they follow the pin with no config changes.
 
 **Switching is a symlink repoint, not a download.** The previous version is kept under `/opt` — `/opt/llvm` is a stable alias for whichever versioned tree is active, and the `/usr/local/bin` entry points all go through it. Two trees are kept (the active one and the most recently installed other one); anything beyond that is pruned automatically, and `--llvm clean` drops the spare. Budget ~7-12GB per tree.
 
@@ -120,6 +121,7 @@ One upstream wrinkle worth knowing about: LLVM renamed its Linux release assets 
 | `g++` | GNU C++ compiler |
 | `gcc` | GNU C compiler |
 | `git` | Version control system |
+| `python3-dev` | Python headers and `libpython`, which building and testing Python extensions written in Rust or C links against |
 | `tree` | Display directory structure as a tree |
 | `unzip` | Extract ZIP archives, used to install fonts and StyLua |
 | `valgrind` | Memory error detector and profiler |

@@ -378,6 +378,7 @@ tool_installed_version() {
     cmake) command_exists cmake && v=$(cmake --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+') ;;
     ninja) command_exists ninja && v=$(ninja --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+') ;;
     uv)    command_exists uv && v=$(uv --version 2>/dev/null | awk '{print $2}') ;;
+    clang) command_exists clang && v=$(clang -dumpversion 2>/dev/null | cut -d. -f1) ;;
   esac
   printf '%s' "${v,,}"
 }
@@ -598,6 +599,7 @@ install_apt_packages() {
     "g++:GNU C++ compiler"
     "gcc:GNU C compiler"
     "git:Version control system"
+    "python3-dev:Python headers and libpython, for building Rust/C Python extensions"
     "tree:Display directory structure as a tree"
     "unzip:Extract ZIP archives, used to install fonts and StyLua"
     "valgrind:Memory error detector and profiler"
@@ -1087,6 +1089,35 @@ llvm_ensure_tinfo5() {
     || log_error "libtinfo5" "install failed — clang from /opt/llvm will not start"
 }
 
+# The clang/clang++ compiler can come from apt instead of /opt/llvm: C23 code
+# (constexpr objects) needs clang 19 or newer, while firmware formatting needs
+# clang-format and clangd to stay at exactly 18.1.8. With clang=<major> in the
+# versions file, apt's clang-<major> is installed with its libclang (for
+# bindgen, which then matches the compiler) and /usr/local/bin/clang and
+# clang++ point at it. lld and the other tools still come from /opt/llvm.
+install_clang_compiler() {
+  local major; major=$(tool_pin clang)
+  [[ -n "$major" ]] || return 0
+  local pkg
+  for pkg in "clang-$major" "libclang-$major-dev"; do
+    if dpkg -s "$pkg" &>/dev/null; then
+      log_skip "$pkg"
+    else
+      run_spin "installing $pkg..." apt_get install -y "$pkg" \
+        && log_ok "$pkg installed" \
+        || { log_error "$pkg" "apt install failed — is clang $major packaged for this Ubuntu?"; return; }
+    fi
+  done
+  if [[ "$(readlink /usr/local/bin/clang)" == "/usr/bin/clang-$major" \
+     && "$(readlink /usr/local/bin/clang++)" == "/usr/bin/clang++-$major" ]]; then
+    log_skip "clang → clang-$major"; return
+  fi
+  sudo ln -sf "/usr/bin/clang-$major" /usr/local/bin/clang \
+    && sudo ln -sf "/usr/bin/clang++-$major" /usr/local/bin/clang++ \
+    && log_ok "clang and clang++ → clang-$major (clang-format and clangd stay on /opt/llvm)" \
+    || log_error "clang" "could not link clang-$major into /usr/local/bin"
+}
+
 # Turns what the user typed into an exact x.y.z. "latest" asks GitHub; a bare
 # major ("18") or major.minor ("18.1") resolves to the newest patch in that
 # series, so you don't have to know that 18.1.8 was the last 18.x release.
@@ -1191,14 +1222,18 @@ llvm_trees() {
 # current releases, libpython3.8 for the ubuntu-18.04-era ones, against Ubuntu
 # 24.04's 3.12 — an ABI break in both directions), so the bundled lldb cannot
 # start. lldb comes from apt instead.
+# clang and clang++ are left alone while the versions file pins a separate
+# compiler (see install_clang_compiler).
 llvm_link_tools() {
+  local tools="clangd clang-format clang-tidy lld ld.lld"
+  [[ -n "$(tool_pin clang)" ]] || tools+=" clang clang++"
   sudo bash -c '
     for l in /usr/local/bin/*; do
       [[ -L "$l" ]] || continue
       t=$(readlink "$l")
       [[ "$t" == /opt/llvm/* && ! -e "$l" ]] && rm -f "$l"
     done
-    for t in clangd clang-format clang-tidy clang clang++ lld ld.lld; do
+    for t in '"$tools"'; do
       [[ -e "/opt/llvm/bin/$t" ]] && ln -sf "/opt/llvm/bin/$t" "/usr/local/bin/$t"
     done
     for b in /opt/llvm/bin/llvm-*; do
@@ -2327,7 +2362,7 @@ verify_versions() {
   # A pin that isn't what's installed means a build here no longer matches
   # the release image. LLVM's pin is checked in verify_clang_tools.
   local key pin have off=""
-  for key in arm-gcc cmake ninja uv; do
+  for key in arm-gcc cmake ninja uv clang; do
     pin=$(tool_pin "$key"); [[ -n "$pin" ]] || continue
     have=$(tool_installed_version "$key")
     [[ "$have" == "$pin" ]] || off+="$key ${have:-missing} (pinned $pin), "
@@ -2584,6 +2619,7 @@ cmd_setup() {
   install_uv_tool meson "Meson"
   install_arm_gcc
   install_llvm_clang_tools
+  install_clang_compiler
   install_rust
 
   section "Editor tooling"
@@ -2870,7 +2906,7 @@ usage() {
   echo -e "    ${GREEN}./install.sh -h, --help${RESET}    ${SUBTEXT}Show this help message${RESET}"
   echo
   echo -e "  ${TEXT}${BOLD}Tool versions:${RESET}"
-  echo -e "    ${SUBTEXT}LLVM, the Arm toolchain, CMake, Ninja and Ruff are installed at the exact versions${RESET}"
+  echo -e "    ${SUBTEXT}LLVM, the clang compiler, the Arm toolchain, CMake, Ninja and Ruff are installed at the versions${RESET}"
   echo -e "    ${SUBTEXT}in the repo's versions file. Override one per machine in ~/.config/dotfiles/versions.${RESET}"
   echo
   echo -e "  ${TEXT}${BOLD}Choosing an LLVM version:${RESET}"

@@ -6,7 +6,8 @@
 # format, untracked). "latest" in either file tracks upstream instead. LLVM can
 # also be set with ./install.sh --llvm, which writes ~/.config/llvm/version.
 
-llvm=18.1.8        # clang, clangd, clang-format; release CI accepts only this clang-format
+llvm=18.1.8        # clangd, clang-format, clang-tidy, lld; firmware builds and release CI accept only this clang-format
+clang=19           # the clang/clang++ compiler (apt clang-19); C23 constexpr needs 19 or newer
 arm-gcc=15.3.rel1  # Arm GNU Toolchain release; its GCC reports 15.3.1
 cmake=4.4.2
 ninja=1.13.2
