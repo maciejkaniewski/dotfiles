@@ -61,7 +61,7 @@ cd ~/dotfiles
 | `--llvm [version]` | Show or change which LLVM/Clang version the toolchain runs on this machine — see [Choosing an LLVM version](#choosing-an-llvm-version) |
 | `-h`, `--help` | Show usage |
 
-`--setup` runs `apt update && upgrade`, installs all tools listed below, sets Zsh as the default shell and Kitty as the default terminal. Safe to re-run — every step is skipped if already satisfied. Works from bash on a fresh machine; log out and back in afterwards so the session starts with Zsh, then open Kitty. Tested on Ubuntu 24.04 and 26.04.
+`--setup` runs `apt update && upgrade`, installs all tools listed below, sets Zsh as the default shell and Kitty as the default terminal. Safe to re-run — every step is skipped if already satisfied. Works from bash on a fresh machine; log out and back in afterwards so the session starts with Zsh, then open Kitty. Tested from a fresh Ubuntu 26.04 install; used daily on 24.04.
 
 `--setup` ends with the same checks `--verify` runs on its own. They exercise the tools rather than just looking for them on `PATH` — compile and run C and C++ with both gcc and clang, cross-compile for cortex-m4 and link against newlib, drive `clangd`, build a throwaway CMake project with Ninja, confirm every tool is at its [pinned version](#pinned-tool-versions), and scan for dangling symlinks. A failed check is an `✗` line and a non-zero exit, so a run can't report success over a broken toolchain. Needs no sudo.
 
