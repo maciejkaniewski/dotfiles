@@ -65,7 +65,10 @@ export EDITOR="nvim"
 
 # Dedup PATH so re-sourcing ~/.zshrc doesn't accumulate duplicate entries.
 typeset -U path PATH
-export PATH="$PATH:$HOME/.local/bin"
+# First, as Ubuntu's ~/.profile would put it. Once zsh is the login shell the
+# desktop session no longer reads ~/.profile, and with ~/.local/bin last apt's
+# copies (meson, say) won over the newer uv-installed ones.
+export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.local/kitty.app/bin:$PATH"
 # No entry needed for the ARM cross-toolchain: install.sh symlinks every
 # arm-none-eabi-* tool into /usr/local/bin, which is already on PATH. A prepend

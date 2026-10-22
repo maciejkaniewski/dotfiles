@@ -13,6 +13,7 @@
 [delta]
 	navigate = true
 	line-numbers = true
+	# The default; the theme picker's choice in the include below wins.
     features = dracula
 [credential]
 	# HTTPS credentials come from the Bitwarden vault (read-only; `bwu` unlocks
@@ -64,3 +65,7 @@
 	verbose = true
 [help]
 	autocorrect = prompt
+# Last, so its [delta] features overrides the default above. Written by the
+# theme picker (./install.sh --theme), untracked.
+[include]
+	path = ~/.config/delta/theme.gitconfig

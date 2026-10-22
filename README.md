@@ -121,6 +121,7 @@ One upstream wrinkle worth knowing about: LLVM renamed its Linux release assets 
 | `g++` | GNU C++ compiler |
 | `gcc` | GNU C compiler |
 | `git` | Version control system |
+| `libxkbcommon-x11-0` | X11 keyboard library the prebuilt Kitty needs to open a window (missing on a fresh 26.04) |
 | `python3-dev` | Python headers and `libpython`, which building and testing Python extensions written in Rust or C links against |
 | `tree` | Display directory structure as a tree |
 | `unzip` | Extract ZIP archives, used to install fonts and StyLua |

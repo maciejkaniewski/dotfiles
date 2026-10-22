@@ -586,9 +586,9 @@ install_apt_packages() {
   SUDO_KEEPALIVE_PID=$!
 
   run_spin "fetching package lists..." apt_get update -qq \
-    && log_ok "package lists up to date" || log_error "apt" "update failed"
+    && log_ok "package lists up to date" || log_error "apt" "update failed — network down? re-run ./install.sh --setup once it is back"
   run_spin "upgrading installed packages..." apt_get upgrade -y -qq \
-    && log_ok "all packages upgraded to latest" || log_error "apt" "upgrade failed"
+    && log_ok "all packages upgraded to latest" || log_error "apt" "upgrade failed — network down? re-run ./install.sh --setup once it is back"
 
   section "System packages"
 
@@ -599,6 +599,7 @@ install_apt_packages() {
     "g++:GNU C++ compiler"
     "gcc:GNU C compiler"
     "git:Version control system"
+    "libxkbcommon-x11-0:X11 keyboard library the prebuilt Kitty loads to open a window"
     "python3-dev:Python headers and libpython, for building Rust/C Python extensions"
     "tree:Display directory structure as a tree"
     "unzip:Extract ZIP archives, used to install fonts and StyLua"
@@ -1605,6 +1606,26 @@ install_fonts() {
 # recommended method. Accepted tradeoff: trusting the origin host, same as
 # running any other vendor-provided installer.
 install_kitty() {
+  install_kitty_app
+  [[ -x "$HOME/.local/kitty.app/bin/kitty" ]] && kitty_desktop_files
+}
+
+# The launcher entries kitty's install docs describe, so Kitty shows up in the
+# app grid. Rewritten on every run: the paths in them are this account's, and
+# an upgrade replaces the copies inside kitty.app.
+kitty_desktop_files() {
+  local app="$HOME/.local/kitty.app" dir="$HOME/.local/share/applications" f
+  mkdir -p "$dir"
+  for f in kitty.desktop kitty-open.desktop; do
+    [[ -f "$app/share/applications/$f" ]] || continue
+    sed -e "s|Icon=kitty|Icon=$app/share/icons/hicolor/256x256/apps/kitty.png|g" \
+        -e "s|Exec=kitty|Exec=$app/bin/kitty|g" \
+        "$app/share/applications/$f" > "$dir/$f"
+  done
+  log_ok "Kitty launcher in the app grid"
+}
+
+install_kitty_app() {
   local latest
   run_spin_capture "checking latest version..." latest github_latest "kovidgoyal/kitty"
   if [[ -z "$latest" ]]; then
@@ -2206,14 +2227,12 @@ apply_theme() {
       || log_error "Zed jump label" "could not patch settings.json"
   fi
 
-  # .gitconfig is symlinked whole too — patch delta's active feature in place.
-  # (Previously hardcoded to catppuccin-frappe and never wired to the flavor
-  # picker at all; now it follows the theme picker like everything else.)
-  if [[ -f "$DOTFILES/.gitconfig" ]]; then
-    sed -i "s/^\([[:space:]]*features = \).*/\1${delta_feature}/" "$DOTFILES/.gitconfig" \
-      && log_ok "${SUBTEXT}delta theme → ${label}${RESET}" \
-      || log_error "delta theme" "could not patch .gitconfig"
-  fi
+  # delta's theme goes in an untracked file that .gitconfig includes last, so
+  # picking a theme leaves the repo's .gitconfig unchanged.
+  mkdir -p "$HOME/.config/delta"
+  printf '[delta]\n\tfeatures = %s\n' "$delta_feature" > "$HOME/.config/delta/theme.gitconfig" \
+    && log_ok "${SUBTEXT}delta theme → ${label}${RESET}" \
+    || log_error "delta theme" "could not write ~/.config/delta/theme.gitconfig"
 
   command_exists bat && bat cache --build &>/dev/null
 }
@@ -2511,8 +2530,16 @@ verify_cli_tools() {
   printf 'x\n' | bat --plain >/dev/null 2>&1   || { echo 'bat failed to render'; return 1; }
   printf 'a\nb\n' | fzf --filter=a >/dev/null 2>&1 || { echo 'fzf --filter failed'; return 1; }
   eza "$d" >/dev/null 2>&1                     || { echo 'eza failed to list a directory'; return 1; }
-  nvim --headless +q 2>/dev/null               || { echo 'nvim failed to start headless'; return 1; }
-  echo 'bat, delta, fzf, rg, fd, jq, eza, zoxide, direnv, dust, duf, btop, lazygit, glab, tree-sitter, bw, uv, nvim all run'
+  nvim --headless +q >/dev/null 2>&1           || { echo 'nvim failed to start headless'; return 1; }
+  # kitty --version runs without them; only opening a window loads the GLFW
+  # backends, so a missing X11/Wayland library shows up only at first launch.
+  local so missing
+  for so in "$HOME"/.local/kitty.app/lib/kitty-extensions/kitty.glfw-*.so; do
+    [[ -e "$so" ]] || continue
+    missing=$(ldd "$so" 2>/dev/null | awk '/not found/ {print $1}' | tr '\n' ' ')
+    [[ -z "$missing" ]] || { echo "kitty cannot open a window: ${missing% } missing (run --setup)"; return 1; }
+  done
+  echo 'bat, delta, fzf, rg, fd, jq, eza, zoxide, direnv, dust, duf, btop, lazygit, glab, tree-sitter, bw, uv, nvim all run; kitty can open a window'
 }
 
 # A dangling symlink is the signature failure of this install model: /opt trees
