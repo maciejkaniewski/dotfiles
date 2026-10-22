@@ -1,0 +1,14 @@
+// Zed tasks — spawnable commands (Zed has no built-in LazyGit, so run it as a
+// terminal task, the same way `<leader>lg` opens it in Neovim).
+//
+// Bound in keymap.json:  space l g  ->  task::Spawn { task_name: "lazygit" }
+[
+  {
+    "label": "lazygit",
+    "command": "lazygit",
+    "working_directory": "$ZED_WORKTREE_ROOT",
+    "hide": "on_success",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false
+  }
+]

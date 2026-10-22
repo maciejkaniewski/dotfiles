@@ -1,0 +1,22 @@
+os:
+  # When lazygit runs inside Neovim (via <leader>lg), open/edit the selected
+  # file in the SAME Neovim instance instead of spawning a nested nvim in
+  # lazygit's own terminal. Uses the $NVIM server socket Neovim sets for the
+  # terminal it launches. Press `q` to close lazygit and land on the file.
+  editPreset: 'nvim-remote'
+
+gui:
+  # File and branch icons; kitty's fonts are Nerd Fonts v3
+  nerdFontsVersion: "3"
+
+git:
+  # Diffs rendered by delta, with the same theme and line numbers as `git diff`
+  # (both read from .gitconfig). --dark because delta can't detect the
+  # background from inside lazygit.
+  diffRenderers:
+    - command: delta --dark --paging=never
+
+# Theme lives in a separate per-flavor file (frappe.yml, mocha.yml, ...),
+# merged in via LG_CONFIG_FILE (set in .zshrc) so it follows the active
+# Catppuccin flavor instead of being pinned to one — see install.sh's
+# apply_flavor(), which symlinks active-theme.yml to the current flavor.

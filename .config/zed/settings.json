@@ -1,0 +1,207 @@
+// Zed settings
+//
+// For information on how to configure Zed, see the Zed
+// documentation: https://zed.dev/docs/configuring-zed
+//
+// To see all of Zed's default settings without changing your
+// custom settings, run `zed: open default settings` from the
+// command palette (cmd-shift-p / ctrl-shift-p)
+{
+  "outline_panel": {
+    "button": false
+  },
+  "cli_default_open_behavior": "new_window",
+  "git_panel": {
+    "dock": "left",
+    "default_width": 200,
+    "show_count_badge": true,        // badge with # of uncommitted changes
+    "commit_title_max_length": 72,   // warn past the 72-char commit convention
+    "collapse_untracked_diff": true  // collapse untracked files in the diff panel
+  },
+  "edit_predictions": {
+    "provider": "zed"
+  },
+  "terminal": {
+    // open the terminal panel on the right instead of the bottom
+    "dock": "right",
+    // FiraCode Nerd Font (p10k glyphs + ligatures), consistent with the editor
+    "font_family": "FiraCode Nerd Font Mono",
+    // show the current working directory at the top of the terminal panel
+    "toolbar": { "breadcrumbs": true }
+  },
+  "agent_servers": {
+    "claude-acp": {
+      "type": "registry"
+    }
+  },
+  "agent": {
+    "dock": "right",
+    "favorite_models": [],
+    "model_parameters": []
+  },
+
+  // ── Vim mode (matches the Neovim setup) ──────────────────────────────────
+  "vim_mode": true,
+  "vim": {
+    // relative in normal mode, absolute in insert — like number+relativenumber
+    "toggle_relative_line_numbers": true,
+    // f/t/search respect case only when the query has uppercase (smartcase)
+    "use_smartcase_find": true,
+    // yank/delete/paste use the system clipboard directly
+    "use_system_clipboard": "always"
+  },
+
+  // ── Editor behaviour parity with vim-options.lua ─────────────────────────
+  "tab_size": 4,                        // tabstop/shiftwidth = 4
+  "hard_tabs": false,                   // expandtab
+  "soft_wrap": "none",                  // wrap = false
+  "vertical_scroll_margin": 8,          // scrolloff = 8
+  "current_line_highlight": "line",     // cursorline
+  "relative_line_numbers": "enabled",        // hybrid line numbers (with the vim toggle above)
+
+  // ── Extra editor features ────────────────────────────────────────────────
+  "use_smartcase_search": true,          // case-smart Ctrl-F / project search (nvim smartcase)
+  "colorize_brackets": true,             // rainbow bracket colors (rainbow-delimiters parity)
+  "hover_popover_delay": 250,            // faster hover (matches nvim updatetime=250)
+  "tabs": { "git_status": true, "file_icons": true, "show_diagnostics": "errors" }, // git-colored tabs + error markers
+  "scrollbar": { "diagnostics": "all", "search_results": true, "git_diff": true },
+  "indent_guides": { "enabled": true, "coloring": "indent_aware", "background_coloring": "disabled" }, // colored guide lines per level (no background blocks)
+  "preview_tabs": { "enabled": true },   // single-click opens a reusable preview tab
+  "command_aliases": { "W": "w", "Q": "q", "Wq": "wq", "WQ": "wq" }, // forgiving :W/:Q typos
+  "redact_private_values": true,         // mask secret-looking values (e.g. tokens in .env)
+  "code_lens": "menu",                   // run/reference lenses in a menu, not inline
+
+  // Formatting is manual (space c f), as in Neovim (conform format_on_save = false)
+  "format_on_save": "off",
+
+  // Don't touch files on save beyond explicit formatting — keeps git diffs clean
+  // (Neovim doesn't auto-strip whitespace or add newlines). Matters with autosave.
+  "remove_trailing_whitespace_on_save": false,
+  "ensure_final_newline_on_save": false,
+
+  // Privacy: no telemetry on this machine
+  "telemetry": { "diagnostics": false, "metrics": false },
+
+  // Closing the last tab (<space>qq) leaves an empty window open instead of
+  // quitting Zed.
+  "when_closing_with_no_tabs": "keep_window_open",
+
+  // which-key popup: after a prefix key (e.g. <space>) show available follow-up
+  // keys at the bottom, like which-key.nvim.
+  "which_key": {
+    "enabled": true,
+    "delay_ms": 500
+  },
+
+  // Auto-save after a short idle, like auto-save.nvim (1s debounce)
+  "autosave": { "after_delay": { "milliseconds": 1000 } },
+
+  // Inlay hints on by default (toggle with space u h), like the LSP config
+  "inlay_hints": {
+    "enabled": true
+  },
+
+  // References / multi-result go-to open in a filterable popup picker instead
+  // of a multibuffer tab — the Telescope-style popup from Neovim (gr).
+  "lsp_results_location": "picker",
+
+  // Flash-style jump labels (s / S), matching Neovim's flash.nvim highlight —
+  // color follows the active theme picker, patched by apply_theme() in
+  // install.sh (was hardcoded to Catppuccin Mocha green until it wasn't)
+  "experimental.theme_overrides": {
+    "vim.helix_jump_label.foreground": "#50fa7b"
+  },
+
+  // ── Git ──────────────────────────────────────────────────────────────────
+  // Inline blame: author + time at the end of the current line (gitsigns parity)
+  "git": {
+    "inline_blame": {
+      "enabled": true,
+      "show_commit_summary": true
+    }
+  },
+
+  // ── Language servers (parity with lsp-config.lua) ────────────────────────
+  "lsp": {
+    // clangd flags matching Neovim, incl. the ARM cross-compiler query-driver
+    // so clangd runs arm-none-eabi-gcc to extract its newlib system headers.
+    "clangd": {
+      "binary": {
+        "arguments": [
+          "--clang-tidy",
+          "--background-index",
+          "--completion-style=detailed",
+          "--header-insertion=iwyu",
+          "--query-driver=/opt/arm-gcc/bin/arm-none-eabi-*"
+        ]
+      }
+    },
+    // basedpyright owns type-checking + hover (standard mode), as in Neovim.
+    "basedpyright": {
+      "settings": {
+        "basedpyright": {
+          "analysis": { "typeCheckingMode": "standard" }
+        }
+      }
+    }
+  },
+
+  // ── Per-language formatting (conform.nvim parity) ────────────────────────
+  // Global format_on_save stays "off" (above); these languages opt in and use
+  // the same formatters as Neovim. Tools must be installed / on PATH:
+  // clang-format (invoked by clangd), ruff, stylua, basedpyright.
+  "languages": {
+    "C":   { "format_on_save": "on", "formatter": "language_server" },
+    "C++": { "format_on_save": "on", "formatter": "language_server" },
+    "Python": {
+      // basedpyright for types, ruff for lint/format; disable Zed's default pyright
+      "language_servers": ["basedpyright", "ruff", "!pyright", "!pylsp"],
+      "format_on_save": "on",
+      "formatter": [
+        {
+          "language_server": {
+            "name": "ruff"
+          }
+        },
+        {
+          "code_action": "source.organizeImports.ruff"
+        }
+      ]
+    },
+    "Lua": {
+      "format_on_save": "on",
+      "formatter": { "external": { "command": "stylua", "arguments": ["--search-parent-directories", "-"] } }
+    }
+  },
+
+  // ── Extensions (auto-installed by Zed, provisions fresh machines) ────────
+  // basedpyright + ruff back the Python config; the rest support the firmware
+  // (C/C++/CMake/ASM/ld) and common config files. dracula is the Dracula
+  // theme extension — unlike Catppuccin/Gruvbox it isn't bundled with Zed,
+  // so the theme picker needs it installed before it can select Dracula
+  // below (see the "theme" key at the bottom of this file).
+  "auto_install_extensions": {
+    "basedpyright": true,
+    "ruff": true,
+    "neocmake": true,
+    "linkerscript": true,
+    "assembly": true,
+    "toml": true,
+    "git-firefly": true,
+    "dracula": true
+  },
+
+  // ── UI ───────────────────────────────────────────────────────────────────
+  "project_panel": {
+    "dock": "left",
+    "default_width": 200
+  },
+  // FiraCode Nerd Font everywhere (editor + UI) with programming ligatures,
+  // matching the Kitty/Neovim terminal setup (+calt +liga).
+  "ui_font_family": "FiraCode Nerd Font Mono",
+  "ui_font_size": 16,
+  "buffer_font_family": "FiraCode Nerd Font Mono",
+  "buffer_font_size": 15,
+  "buffer_font_features": { "calt": true, "liga": true },
+  "theme": "Dracula"
+}

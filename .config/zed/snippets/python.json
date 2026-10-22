@@ -1,0 +1,123 @@
+{
+  "if __name__ == __main__": {
+    "prefix": "ifmain",
+    "body": ["if __name__ == \"__main__\":", "    ${1:main()}"],
+    "description": "Main guard"
+  },
+  "Function": {
+    "prefix": "def",
+    "body": ["def ${1:fname}($2):", "    ${3:pass}"],
+    "description": "Function"
+  },
+  "Function w/ return type": {
+    "prefix": "deft",
+    "body": ["def ${1:fname}($2) -> ${3:None}:", "    ${4:pass}"],
+    "description": "Function with return type annotation"
+  },
+  "Method": {
+    "prefix": "defs",
+    "body": ["def ${1:mname}(self$2):", "    ${3:pass}"],
+    "description": "Method taking self"
+  },
+  "class": {
+    "prefix": "class",
+    "body": ["class ${1:classname}:", "    ${2:pass}"],
+    "description": "Class"
+  },
+  "Derived class": {
+    "prefix": "classd",
+    "body": ["class ${1:classname}($2):", "    ${3:pass}"],
+    "description": "Class with base"
+  },
+  "property template": {
+    "prefix": "property",
+    "body": [
+      "@property",
+      "def ${1:pname}(self):",
+      "    \"\"\"${2:The $1 property.}\"\"\"",
+      "    return self._${1:pname}",
+      "",
+      "@${1:pname}.setter",
+      "def ${1:pname}(self, value):",
+      "    self._${1:pname} = value"
+    ],
+    "description": "Property getter + setter"
+  },
+  "for": {
+    "prefix": "for",
+    "body": ["for ${1:value} in ${2:iterable}:", "    ${3:pass}"],
+    "description": "for loop"
+  },
+  "for w/ range": {
+    "prefix": "forr",
+    "body": ["for ${1:value} in range($2):", "    ${3:pass}"],
+    "description": "for loop over range"
+  },
+  "while": {
+    "prefix": "while",
+    "body": ["while ${1:condition}:", "    ${2:pass}"],
+    "description": "while loop"
+  },
+  "with": {
+    "prefix": "with",
+    "body": ["with ${1:expression} as ${2:target}:", "    ${3:pass}"],
+    "description": "with statement"
+  },
+  "if/else": {
+    "prefix": "ifelse",
+    "body": ["if ${1:condition}:", "    ${2:pass}", "else:", "    ${3:pass}"],
+    "description": "if/else"
+  },
+  "try/except": {
+    "prefix": "try",
+    "body": ["try:", "    ${1:pass}", "except ${2:Exception} as ${3:e}:", "    ${4:raise $3}"],
+    "description": "try/except"
+  },
+  "try/except/finally": {
+    "prefix": "tryf",
+    "body": [
+      "try:",
+      "    ${1:pass}",
+      "except ${2:Exception} as ${3:e}:",
+      "    ${4:raise $3}",
+      "finally:",
+      "    ${5:pass}"
+    ],
+    "description": "try/except/finally"
+  },
+  "except": {
+    "prefix": "except",
+    "body": ["except$1:", "    ${2:pass}"],
+    "description": "except clause"
+  },
+  "except as": {
+    "prefix": "exceptas",
+    "body": ["except ${1:Exception} as ${2:e}:", "    ${3:raise $2}"],
+    "description": "except ... as ..."
+  },
+  "lambda": {
+    "prefix": "lambda",
+    "body": ["lambda ${1:parameter_list}: ${2:expression}"],
+    "description": "lambda"
+  },
+  "from ... import ...": {
+    "prefix": "fromim",
+    "body": ["from ${1:pathlib} import ${2:Path}"],
+    "description": "from ... import ..."
+  },
+  "List comprehension": {
+    "prefix": "lc",
+    "body": ["[${3:value} for ${2:value} in ${1:iterable}]$0"],
+    "description": "List comprehension"
+  },
+  "List comprehension if filter": {
+    "prefix": "lci",
+    "body": ["[${3:value} for ${2:value} in ${1:iterable} if ${4:condition}]$0"],
+    "description": "List comprehension with filter"
+  },
+  "Dictionary comprehension": {
+    "prefix": "dc",
+    "body": ["{${4:key}: ${5:value} for ${2:key}, ${3:value} in ${1:iterable}}$0"],
+    "description": "Dict comprehension"
+  }
+}

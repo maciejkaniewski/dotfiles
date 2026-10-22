@@ -1,0 +1,66 @@
+# user.name and user.email are in ~/.gitconfig.local (machine-specific, not
+# tracked), written by ./install.sh --identity
+[include]
+    path = ~/.config/delta/catppuccin.gitconfig
+    path = ~/.config/delta/gruvbox.gitconfig
+    path = ~/.config/delta/dracula.gitconfig
+    path = ~/.gitconfig.local
+[core]
+    editor = nvim
+    pager = delta
+[interactive]
+	diffFilter = delta --color-only
+[delta]
+	navigate = true
+	line-numbers = true
+    features = dracula
+[credential]
+	# HTTPS credentials come from the Bitwarden vault (read-only; `bwu` unlocks
+	# it first). Resolves to .local/bin/git-credential-bw on PATH. Silent when
+	# the vault is locked or nothing matches, so git falls back to its prompt.
+	helper = bw
+[init]
+	defaultBranch = main
+[merge]
+	conflictStyle = zdiff3
+[submodule]
+	# checkout, switch and pull also move submodules to the recorded commit
+	recurse = true
+[push]
+	autoSetupRemote = true
+	followTags = true
+	# Refuse to push a commit whose submodule commit isn't on the remote yet.
+	# submodule.recurse turns this into on-demand, which would push the
+	# submodule (e.g. a shared library repo) by itself. git applies whichever of
+	# the two it reads last, so this must stay below [submodule].
+	recurseSubmodules = check
+[pull]
+	rebase = true
+[fetch]
+	prune = true
+	pruneTags = true
+[branch]
+	sort = -committerdate
+[tag]
+	sort = -v:refname
+[column]
+	ui = auto
+[rerere]
+	enabled = true
+	autoupdate = true
+[diff]
+	algorithm = histogram
+	colorMoved = default
+	mnemonicPrefix = true
+	renames = copies
+	submodule = log
+[status]
+	submoduleSummary = true
+[rebase]
+	autosquash = true
+	autostash = true
+	updateRefs = true
+[commit]
+	verbose = true
+[help]
+	autocorrect = prompt

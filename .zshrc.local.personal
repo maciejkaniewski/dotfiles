@@ -1,0 +1,5 @@
+# ── Personal machine overrides ────────────────────────────────────────────────
+
+# Git's name and email are in ~/.gitconfig.local (./install.sh --identity),
+# not GIT_*_EMAIL exports: those override every config file, including a
+# repo's own .git/config.

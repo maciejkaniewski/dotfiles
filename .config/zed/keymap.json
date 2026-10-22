@@ -1,0 +1,155 @@
+// Zed keymap — mirrors the standalone Neovim setup in this dotfiles repo.
+//
+// Leader is <space> (as in Neovim). Groups below match the which-key groups:
+//   space f  find      space h  git hunks    space x  diagnostics
+//   space c  code      space t  tabs         space u  toggles (UI)
+//   space d  document  space w  workspace    space r  rename
+//   space q  quit
+//
+// Everything Zed's vim mode already does (surround via ys/cs/ds, folds with
+// zM/zR, ctrl-w window motions, g d go-to-definition, etc.) is left untouched —
+// this file only adds the Neovim-specific bindings on top.
+//
+// Reference for action names: `zed: open default keymap` in the command palette.
+[
+  // ── Normal mode: leader mappings + LSP + navigation ──────────────────────
+  {
+    "context": "vim_mode == normal",
+    "bindings": {
+      // Find (Telescope parity) ------------------------------------------------
+      "ctrl-p": "file_finder::Toggle",        // <C-p>       find files
+      "space f g": "pane::DeploySearch",       // <leader>fg  live grep (project search)
+      "space /": "buffer_search::Deploy",      // <leader>/   fuzzy find in current buffer
+
+      // Explorer / Git panels --------------------------------------------------
+      "space e": "project_panel::ToggleFocus", // <leader>e   file explorer
+      "space g s": "git_panel::ToggleFocus",   // <leader>gs  git status panel
+      "space shift-g": "git_graph::Open",      // <leader>G   git graph (commit history)
+      "space l g": ["task::Spawn", { "task_name": "lazygit", "reveal_target": "center" }], // <leader>lg  LazyGit (tasks.json)
+
+      // Outline / symbols ------------------------------------------------------
+      "space d s": "outline::Toggle",          // <leader>ds  document symbols (fuzzy)
+      "space w s": "project_symbols::Toggle",  // <leader>ws  workspace symbols
+
+      // LSP --------------------------------------------------------------------
+      "g r": "editor::FindAllReferences",      // gr          references (see NOTE below)
+      "g d": "editor::GoToDefinition",         // gd          definition
+      "shift-k": "editor::Hover",              // K           hover docs
+      "space r n": "editor::Rename",           // <leader>rn  rename symbol
+      "space c a": "editor::ToggleCodeActions", // <leader>ca code action
+      "space c f": "editor::Format",           // <leader>cf  format buffer
+      "space c h": "editor::SwitchSourceHeader", // <leader>ch clangd switch .c/.h
+
+      // Diagnostics navigation -------------------------------------------------
+      "] d": "editor::GoToDiagnostic",         // ]d          next diagnostic
+      "[ d": "editor::GoToPreviousDiagnostic", // [d          prev diagnostic
+      "space x x": "diagnostics::Deploy",      // <leader>xx  project diagnostics (Trouble)
+
+      // Git hunks (gitsigns parity) -------------------------------------------
+      "] c": "editor::GoToHunk",               // ]c          next hunk
+      "[ c": "editor::GoToPreviousHunk",        // [c          prev hunk
+      "space h p": "editor::ToggleSelectedDiffHunks", // <leader>hp  preview/expand hunk
+      "space h d": "git::Diff",                // <leader>hd  diff view
+      "space h b": "git::Blame",               // <leader>hb  blame line
+      "space h s": "git::StageRange",          // <leader>hs  stage hunk
+      "space h r": "git::Restore",             // <leader>hr  reset hunk
+      "space h shift-s": "git::StageFile",     // <leader>hS  stage buffer
+      "space h shift-r": "git::RestoreFile",   // <leader>hR  reset buffer
+
+      // Toggles (UI) -----------------------------------------------------------
+      "space u h": "editor::ToggleInlayHints", // <leader>uh  toggle inlay hints
+      "space u b": "git::Blame",               // <leader>ub  toggle line blame (closest: blame)
+      "space u z": "workspace::ToggleCenteredLayout", // <leader>uz  zen / centered layout
+
+      // Tabs -------------------------------------------------------------------
+      "space t n": "workspace::NewFile",       // <leader>tn  new tab/file
+      "space t c": "pane::CloseActiveItem",    // <leader>tc  close tab
+      "] t": "pane::ActivateNextItem",         // ]t          next tab
+      "[ t": "pane::ActivatePreviousItem",     // [t          prev tab
+
+      // Move current line up / down -------------------------------------------
+      "alt-k": "editor::MoveLineUp",
+      "alt-j": "editor::MoveLineDown",
+
+      // Markdown preview ------------------------------------------------------
+      "space m p": "markdown::OpenPreview",            // <leader>mp  preview
+      "space m shift-p": "markdown::OpenPreviewToTheSide" // <leader>mP  preview to the side
+    }
+  },
+
+  // ── Make <space> a pure leader (Neovim's <Space> = <Nop>) ────────────────
+  // By default vim binds <space> to a motion (WrappingRight), so pressing it
+  // fires immediately and dismisses the which-key popup. Null it so <space> is
+  // prefix-only and the popup stays until you press the next key.
+  {
+    "context": "vim_mode == normal || vim_mode == visual",
+    "bindings": {
+      "space": null
+    }
+  },
+
+  // ── Flash-style labeled jump (s / S) ─────────────────────────────────────
+  // This is the flash.nvim behaviour: press `s`, the buffer dims and a green
+  // label appears at every jump target — type the label to jump straight there
+  // (no guessing). Zed's built-in is HelixJumpToWord. Works in normal + visual
+  // (in visual it extends the selection). SHADOWS vim's `s`/`S` (substitute);
+  // use c+motion (cl, cw, …) to substitute instead.
+  {
+    "context": "vim_mode == normal || vim_mode == visual",
+    "bindings": {
+      "s": "vim::HelixJumpToWord",
+      "shift-s": "vim::HelixJumpToWord"
+    }
+  },
+
+  // ── Git hunk stage/reset over a visual selection ─────────────────────────
+  {
+    "context": "vim_mode == visual",
+    "bindings": {
+      "space h s": "git::StageRange",          // <leader>hs  stage selected hunk
+      "space h r": "git::Restore"              // <leader>hr  reset selected range
+    }
+  },
+
+  // ── Explorer/git fallback when no tabs are open ──────────────────────────
+  // "space e"/"space g" above only fire under vim_mode == normal, which
+  // requires a focused Editor. Closing all tabs leaves an empty Pane with no
+  // Editor at all, so that context never matches and the leader chord goes
+  // dead — ctrl-p still works there only because Zed's *default* file finder
+  // binding lives at the unconditional Workspace context, unlike our custom
+  // leader keys. Restrict this to Pane && !vim_mode (true only when the pane
+  // is focused but has no vim/editor state) so it fills that gap without
+  // hijacking a literal "space" + "e" typed in insert mode.
+  {
+    "context": "Pane && !vim_mode",
+    "bindings": {
+      "space e": "project_panel::ToggleFocus",
+      "space g s": "git_panel::ToggleFocus"
+    }
+  },
+
+  // ── Don't let a bare ctrl-w close the tab ────────────────────────────────
+  // ctrl-w is the window-command prefix (ctrl-w h/j/k/l). Zed's default binds
+  // bare ctrl-w to "close tab", so an incomplete ctrl-w closed the tab after the
+  // timeout. Null it: ctrl-w is now prefix-only. Close tabs with <space>tc.
+  {
+    "context": "Pane",
+    "bindings": {
+      "ctrl-w": null
+    }
+  },
+
+  // ── Vim-style pane navigation out of the terminal ────────────────────────
+  // In the terminal ctrl-w is normally sent to the shell, so ctrl-w h/j/k/l
+  // couldn't move focus back to the editor. Bind them here. (ctrl-backspace
+  // still deletes a word in the shell.)
+  {
+    "context": "Terminal",
+    "bindings": {
+      "ctrl-w h": "workspace::ActivatePaneLeft",
+      "ctrl-w l": "workspace::ActivatePaneRight",
+      "ctrl-w k": "workspace::ActivatePaneUp",
+      "ctrl-w j": "workspace::ActivatePaneDown"
+    }
+  }
+]
