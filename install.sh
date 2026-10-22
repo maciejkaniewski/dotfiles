@@ -645,7 +645,7 @@ install_bat() {
     if command_exists bat; then
       log_skip "bat $(bat --version | awk '{print $2}') (could not check latest)"; return
     else
-      log_error "bat" "could not resolve latest version"; return
+      log_error "bat" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists bat; then
@@ -673,7 +673,7 @@ install_delta() {
     if command_exists delta; then
       log_skip "delta $(delta --version | awk '{print $2}') (could not check latest)"; return
     else
-      log_error "delta" "could not resolve latest version"; return
+      log_error "delta" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists delta; then
@@ -701,7 +701,7 @@ install_fzf() {
     if command_exists fzf; then
       log_skip "fzf $(fzf --version | awk '{print $1}') (could not check latest)"; return
     else
-      log_error "fzf" "could not resolve latest version"; return
+      log_error "fzf" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   local current_path; current_path=$(command -v fzf || true)
@@ -736,7 +736,7 @@ install_eza() {
     if command_exists eza; then
       log_skip "eza $(eza --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+') (could not check latest)"; return
     else
-      log_error "eza" "could not resolve latest version"; return
+      log_error "eza" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists eza; then
@@ -773,7 +773,7 @@ install_ripgrep() {
     if command_exists rg; then
       log_skip "ripgrep $(rg --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+') (could not check latest)"; return
     else
-      log_error "ripgrep" "could not resolve latest version"; return
+      log_error "ripgrep" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists rg; then
@@ -804,7 +804,7 @@ install_fd() {
     if command_exists fd; then
       log_skip "fd $(fd --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+') (could not check latest)"; return
     else
-      log_error "fd" "could not resolve latest version"; return
+      log_error "fd" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists fd; then
@@ -835,7 +835,7 @@ install_zoxide() {
     if command_exists zoxide; then
       log_skip "zoxide $(zoxide --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+') (could not check latest)"; return
     else
-      log_error "zoxide" "could not resolve latest version"; return
+      log_error "zoxide" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists zoxide; then
@@ -865,7 +865,7 @@ install_direnv() {
     if command_exists direnv; then
       log_skip "direnv $(direnv version 2>/dev/null) (could not check latest)"; return
     else
-      log_error "direnv" "could not resolve latest version"; return
+      log_error "direnv" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists direnv; then
@@ -896,7 +896,7 @@ install_dust() {
     if command_exists dust; then
       log_skip "dust $(dust --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+') (could not check latest)"; return
     else
-      log_error "dust" "could not resolve latest version"; return
+      log_error "dust" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists dust; then
@@ -925,7 +925,7 @@ install_duf() {
     if command_exists duf; then
       log_skip "duf $(duf --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+' | head -1) (could not check latest)"; return
     else
-      log_error "duf" "could not resolve latest version"; return
+      log_error "duf" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists duf; then
@@ -955,7 +955,7 @@ install_cmake() {
   [[ -n "$pin" ]] || run_spin_capture "checking latest version..." latest github_latest "Kitware/CMake"
   if [[ -z "$latest" ]]; then
     [[ -n "$have" ]] && { log_skip "CMake $have (could not check latest)"; return; }
-    log_error "CMake" "could not resolve latest version"; return
+    log_error "CMake" "could not resolve latest version — network down? re-run once it is back"; return
   fi
   needs_install "CMake" "$have" "$latest" "$pin" || return
   local dir="cmake-${latest}-linux-${ARCH_GENERIC}"
@@ -1017,7 +1017,7 @@ install_arm_gcc() {
       [[ -x /opt/arm-gcc/bin/arm-none-eabi-gcc ]] && arm_gcc_link_tools
       log_skip "ARM GNU Toolchain $have (could not check latest)"; return
     fi
-    log_error "ARM GNU Toolchain" "could not resolve latest version"; return
+    log_error "ARM GNU Toolchain" "could not resolve latest version — network down? re-run once it is back"; return
   fi
   if ! needs_install "ARM GNU Toolchain" "$have" "$latest" "$pin"; then
     [[ -x /opt/arm-gcc/bin/arm-none-eabi-gcc ]] && arm_gcc_link_tools
@@ -1126,6 +1126,29 @@ install_clang_compiler() {
     && sudo ln -sf "/usr/bin/clang++-$major" /usr/local/bin/clang++ \
     && log_ok "clang and clang++ → clang-$major (clang-format and clangd stay on /opt/llvm)" \
     || log_error "clang" "could not link clang-$major into /usr/local/bin"
+}
+
+# clang (and clangd) take C++ headers from the newest GCC under /usr/lib/gcc,
+# whether or not that GCC's libstdc++ headers are installed. Installing gcc-14
+# alone, as apt install gcc-14 does, made every C++ file fail with "'vector'
+# file not found". So install libstdc++-<N>-dev for each GCC a clang selects.
+ensure_clang_libstdcxx() {
+  local cc gcc_major majors=()
+  for cc in /usr/local/bin/clang /opt/llvm/bin/clang; do
+    [[ -x "$cc" ]] || continue
+    gcc_major=$("$cc" -v -x c++ -fsyntax-only /dev/null 2>&1 \
+      | sed -n 's|^Selected GCC installation: .*/\([0-9][0-9]*\)$|\1|p')
+    [[ -n "$gcc_major" && " ${majors[*]} " != *" $gcc_major "* ]] && majors+=("$gcc_major")
+  done
+  for gcc_major in "${majors[@]}"; do
+    if dpkg -s "libstdc++-$gcc_major-dev" &>/dev/null; then
+      log_skip "libstdc++-$gcc_major-dev (C++ headers clang uses)"
+    else
+      run_spin "installing libstdc++-$gcc_major-dev..." apt_get install -y "libstdc++-$gcc_major-dev" \
+        && log_ok "libstdc++-$gcc_major-dev installed (clang uses GCC $gcc_major's C++ headers)" \
+        || log_error "libstdc++-$gcc_major-dev" "apt install failed — clang++ cannot find <vector>"
+    fi
+  done
 }
 
 # Turns what the user typed into an exact x.y.z. "latest" asks GitHub; a bare
@@ -1329,7 +1352,7 @@ install_llvm_clang_tools() {
     if [[ -n "$installed" ]]; then
       log_skip "LLVM/Clang tools $installed (could not check latest)"; return
     else
-      log_error "LLVM/Clang tools" "could not resolve latest version"; return
+      log_error "LLVM/Clang tools" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
 
@@ -1460,7 +1483,7 @@ install_btop() {
     if command_exists btop; then
       log_skip "btop $(btop --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+') (could not check latest)"; return
     else
-      log_error "btop" "could not resolve latest version"; return
+      log_error "btop" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists btop; then
@@ -1487,7 +1510,7 @@ install_ninja() {
   [[ -n "$pin" ]] || run_spin_capture "checking latest version..." latest github_latest "ninja-build/ninja"
   if [[ -z "$latest" ]]; then
     [[ -n "$have" ]] && { log_skip "ninja $have (could not check latest)"; return; }
-    log_error "ninja" "could not resolve latest version"; return
+    log_error "ninja" "could not resolve latest version — network down? re-run once it is back"; return
   fi
   needs_install "ninja" "$have" "$latest" "$pin" || return
   local zip="/tmp/ninja_${latest}.zip"
@@ -1517,7 +1540,7 @@ install_bw() {
     if command_exists bw; then
       log_skip "bw $(bw --version 2>/dev/null) (could not check latest)"; return
     else
-      log_error "bw" "could not resolve latest version"; return
+      log_error "bw" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists bw; then
@@ -1549,7 +1572,7 @@ install_jq() {
     if command_exists jq; then
       log_skip "jq $(jq --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+') (could not check latest)"; return
     else
-      log_error "jq" "could not resolve latest version"; return
+      log_error "jq" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists jq; then
@@ -1641,7 +1664,7 @@ install_kitty_app() {
     if command_exists kitty; then
       log_skip "Kitty $(kitty --version | awk '{print $2}') (could not check latest)"; return
     else
-      log_error "Kitty" "could not resolve latest version"; return
+      log_error "Kitty" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists kitty; then
@@ -1668,7 +1691,7 @@ install_lazygit() {
     if command_exists lazygit; then
       log_skip "lazygit $(lazygit --version | grep -oP ', version=\K[^,]+') (could not check latest)"; return
     else
-      log_error "lazygit" "could not resolve latest version"; return
+      log_error "lazygit" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists lazygit; then
@@ -1698,7 +1721,7 @@ install_glab() {
     if command_exists glab; then
       log_skip "glab $(glab --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1) (could not check latest)"; return
     else
-      log_error "glab" "could not resolve latest version"; return
+      log_error "glab" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists glab; then
@@ -1769,7 +1792,7 @@ install_tree_sitter_cli() {
     if command_exists tree-sitter; then
       log_skip "tree-sitter $(tree-sitter --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+') (could not check latest)"; return
     else
-      log_error "tree-sitter" "could not resolve latest version"; return
+      log_error "tree-sitter" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists tree-sitter; then
@@ -1898,7 +1921,7 @@ install_uv() {
   [[ -n "$pin" ]] || run_spin_capture "checking latest version..." latest github_latest "astral-sh/uv"
   if [[ -z "$latest" ]]; then
     [[ -n "$have" ]] && { log_skip "uv $have (could not check latest)"; return; }
-    log_error "uv" "could not resolve latest version"; return
+    log_error "uv" "could not resolve latest version — network down? re-run once it is back"; return
   fi
   needs_install "uv" "$have" "$latest" "$pin" || return
   if [[ -n "$have" ]]; then
@@ -1964,7 +1987,7 @@ install_stylua() {
     if command_exists stylua; then
       log_skip "StyLua $(stylua --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+') (could not check latest)"; return
     else
-      log_error "StyLua" "could not resolve latest version"; return
+      log_error "StyLua" "could not resolve latest version — network down? re-run once it is back"; return
     fi
   fi
   if command_exists stylua; then
@@ -2671,6 +2694,7 @@ cmd_setup() {
   install_arm_gcc
   install_llvm_clang_tools
   install_clang_compiler
+  ensure_clang_libstdcxx
   install_rust
 
   section "Editor tooling"
