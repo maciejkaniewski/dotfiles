@@ -1,0 +1,3 @@
+# The theme picker edits two lines of this file; git-filters/zed-theme keeps
+# them out of git status and restores them on checkout.
+.config/zed/settings.json filter=zed-theme

@@ -500,6 +500,15 @@ link_parts() {
 # them; keys it does set win, so changing a hook means editing the repo file and
 # re-running install. A legacy symlink is replaced by its contents, or by just
 # the base when it dangles (the repo file it pointed at no longer exists).
+# Registers git-filters/zed-theme for this checkout (.gitattributes names it),
+# so the theme picker's edits to Zed's settings.json stay out of git status.
+# In .git/config because a filter is per clone and never pushed.
+register_git_filters() {
+  git -C "$DOTFILES" config filter.zed-theme.clean 'git-filters/zed-theme clean %f' \
+    && git -C "$DOTFILES" config filter.zed-theme.smudge 'git-filters/zed-theme smudge %f' \
+    || log_error "git filter" "could not register zed-theme in $DOTFILES/.git/config"
+}
+
 merge_claude_settings() {
   local base="$DOTFILES/.claude/settings.base.json" dst="$HOME/.claude/settings.json"
   local name="${dst#"$HOME/"}" live merged tmp
@@ -2225,6 +2234,21 @@ apply_theme() {
       "$DOTFILES/.config/zed/settings.json" \
       && log_ok "${SUBTEXT}Zed jump label → #${jump_label_hex}${RESET}" \
       || log_error "Zed jump label" "could not patch settings.json"
+
+    # The two values git-filters/zed-theme restores on checkout, so a pull that
+    # touches settings.json keeps this machine's theme.
+    mkdir -p "$HOME/.config/zed"
+    printf '"theme": "%s"\n"vim.helix_jump_label.foreground": "#%s"\n' "$zed_theme" "$jump_label_hex" \
+      > "$HOME/.config/zed/theme.local"
+
+    # git counts a file whose size changed as modified before running the
+    # clean filter, so a theme name of another length would still show up.
+    # When the theme is the file's only difference, staging it records the new
+    # size and stages nothing, because the filter turns it back into the
+    # committed text. Real edits in the file are left alone.
+    register_git_filters
+    git -C "$DOTFILES" diff --quiet -- .config/zed/settings.json 2>/dev/null \
+      && git -C "$DOTFILES" add -- .config/zed/settings.json 2>/dev/null
   fi
 
   # delta's theme goes in an untracked file that .gitconfig includes last, so
@@ -2683,6 +2707,7 @@ cmd_setup() {
     make_link "$src" "$dst"
   done
   merge_claude_settings
+  register_git_filters
   fix_ssh_modes
 
   configure_theme
@@ -2759,6 +2784,7 @@ cmd_link() {
     make_link "$src" "$dst"
   done
   merge_claude_settings
+  register_git_filters
   fix_ssh_modes
 
   configure_theme

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# git filter for .config/zed/settings.json (see .gitattributes), registered in
+# this repo's .git/config by install.sh.
+#
+# The theme picker writes the chosen theme and jump-label colour into that
+# file, which ~/.config/zed/settings.json links to, and keeps the two values in
+# ~/.config/zed/theme.local. clean puts the committed values back before git
+# compares or stages the file, so a theme choice never shows as a change.
+# smudge puts the local ones back when git writes the file, so a pull never
+# resets the theme. Only the quoted values change; every other byte passes
+# through.
+#
+# To commit a different default theme, stage with the filter off:
+#   git -c filter.zed-theme.clean=cat add .config/zed/settings.json
+
+case "$1" in
+  clean)  values=$(git show "HEAD:$2" 2>/dev/null) ;;
+  smudge) values=$(cat "$HOME/.config/zed/theme.local" 2>/dev/null) ;;
+  *)      echo "usage: zed-theme clean|smudge <path>" >&2; exit 2 ;;
+esac
+[[ -n "$values" ]] || exec cat
+
+# Anchored to line start, like apply_theme's patch, so a comment that mentions
+# a "theme": value in prose is never matched.
+VALUES=$values exec perl -e '
+  my $key = qr/"(theme|vim\.helix_jump_label\.foreground)":\s*/;
+  my %value;
+  for (split /\n/, $ENV{VALUES}) { $value{$1} = $2 if /^\s*$key("[^"]*")/ }
+  while (<STDIN>) {
+    s/^(\s*$key)("[^"]*")/$1 . ($value{$2} \/\/ $3)/e;
+    print;
+  }'

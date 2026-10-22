@@ -682,7 +682,7 @@ on, so `u` still reaches back past a reload if you need it.
 
 [Zed](https://zed.dev) is set up as a second editor that reuses the Neovim muscle memory. `settings.json` enables `vim_mode` and matches the core editor behaviour; `keymap.json` re-creates the `<leader>`-key mappings on top of Zed's built-in vim bindings. Nothing that Zed's vim mode already provides (surround with `ys`/`cs`/`ds`, folds `zM`/`zR`, `ctrl-w` window motions, `gd`) is overridden.
 
-**Theme** — a single `"theme": "Catppuccin <Flavor>"`, `"theme": "Gruvbox Dark"`, or `"theme": "Dracula"` string that follows the active theme picker (no OS-driven light/dark switching, matching kitty/bat/fzf/eza). Catppuccin and Gruvbox are built into Zed already; Dracula isn't bundled, so it's listed in `auto_install_extensions` to get pulled in automatically. `install.sh`'s `apply_theme()` patches the `"theme"` value in place on each theme switch, since `settings.json` is symlinked whole and Zed has no config-include mechanism like kitty's.
+**Theme** — a single `"theme": "Catppuccin <Flavor>"`, `"theme": "Gruvbox Dark"`, or `"theme": "Dracula"` string that follows the active theme picker (no OS-driven light/dark switching, matching kitty/bat/fzf/eza). Catppuccin and Gruvbox are built into Zed already; Dracula isn't bundled, so it's listed in `auto_install_extensions` to get pulled in automatically. `install.sh`'s `apply_theme()` patches the `"theme"` value in place on each theme switch, since `settings.json` is symlinked whole and Zed has no config-include mechanism like kitty's. A git filter keeps that from dirtying the repo: `git-filters/zed-theme` (named in `.gitattributes`, registered in the clone's `.git/config` by `install.sh`) puts the committed theme and jump-label values back before git compares the file, and puts this machine's choice back, from the untracked `~/.config/zed/theme.local`, when a pull rewrites it. Every other line of `settings.json` is tracked as usual. To commit a new default theme, stage with the filter off: `git -c filter.zed-theme.clean=cat add .config/zed/settings.json`.
 
 **Discoverability** — the native which-key popup is enabled (`which_key.enabled`, 1000 ms delay). Hold `<space>` (or any prefix) and a hint of the available follow-up keys appears at the bottom, like [which-key.nvim](https://github.com/folke/which-key.nvim).
 
@@ -1075,6 +1075,9 @@ dotfiles/
 ├── .zshrc
 ├── .zshrc.local.personal
 ├── .zshrc.local.work
+├── .gitattributes                     # runs git-filters/zed-theme on Zed's settings.json
+├── git-filters/
+│   └── zed-theme                      # keeps the theme picker's Zed edits out of git status
 ├── LICENSE                            # MIT
 ├── install.sh
 └── versions                           # exact tool versions --setup installs
