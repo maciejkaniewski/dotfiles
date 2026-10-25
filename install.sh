@@ -1105,9 +1105,14 @@ llvm_ensure_tinfo5() {
 # versions file, apt's clang-<major> is installed with its libclang (for
 # bindgen, which then matches the compiler) and /usr/local/bin/clang and
 # clang++ point at it. lld and the other tools still come from /opt/llvm.
+#
+# Ubuntu's own archive has clang-19 on 24.04 and 26.04 but stops at clang-15 on
+# 22.04, so when the release doesn't package that major, LLVM's apt.llvm.org
+# repository for the release is added first. Its packages have the same names.
 install_clang_compiler() {
   local major; major=$(tool_pin clang)
   [[ -n "$major" ]] || return 0
+  apt-cache show "clang-$major" &>/dev/null || add_llvm_apt_repo "$major" || return
   local pkg
   for pkg in "clang-$major" "libclang-$major-dev"; do
     if dpkg -s "$pkg" &>/dev/null; then
@@ -1126,6 +1131,20 @@ install_clang_compiler() {
     && sudo ln -sf "/usr/bin/clang++-$major" /usr/local/bin/clang++ \
     && log_ok "clang and clang++ → clang-$major (clang-format and clangd stay on /opt/llvm)" \
     || log_error "clang" "could not link clang-$major into /usr/local/bin"
+}
+
+add_llvm_apt_repo() {
+  local major=$1 codename; codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+  local key=/etc/apt/keyrings/apt.llvm.org.gpg
+  local list=/etc/apt/sources.list.d/llvm-toolchain-$codename-$major.list
+  run_spin "adding apt.llvm.org for clang $major on $codename..." bash -c "
+    sudo install -d -m 755 /etc/apt/keyrings &&
+    curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor | sudo tee '$key' >/dev/null &&
+    echo 'deb [arch=${ARCH_DEB} signed-by=$key] https://apt.llvm.org/$codename/ llvm-toolchain-$codename-$major main' | sudo tee '$list' >/dev/null &&
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq" \
+    && apt-cache show "clang-$major" &>/dev/null \
+    && log_ok "apt.llvm.org added (Ubuntu $codename doesn't package clang-$major)" \
+    || { log_error "clang-$major" "not in Ubuntu $codename's archive, and adding apt.llvm.org failed"; return 1; }
 }
 
 # clang (and clangd) take C++ headers from the newest GCC under /usr/lib/gcc,

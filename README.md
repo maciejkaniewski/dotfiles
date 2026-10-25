@@ -76,7 +76,7 @@ The build toolchain is installed at exact versions, set in [`versions`](versions
 | Tool | Version | Why exact |
 |---|---|---|
 | LLVM | 18.1.8 | `clang-format`, `clangd`, `clang-tidy`, `lld`. Firmware builds and release CI accept only clang-format 18.1.8, because other patch levels format the same code differently; Zed formats through clangd, so it stays on 18.1.8 too |
-| clang compiler | 19 | `clang` and `clang++` from apt's `clang-19`, with its libclang for bindgen. C23 code (`constexpr` objects) needs clang 19 or newer |
+| clang compiler | 19 | `clang` and `clang++` from apt's `clang-19`, with its libclang for bindgen. Ubuntu 22.04 doesn't package it, so there `--setup` adds the apt.llvm.org repository first. C23 code (`constexpr` objects) needs clang 19 or newer |
 | Arm GNU Toolchain | 15.3.rel1 (GCC 15.3.1) | The compiler firmware releases are built with |
 | CMake | 4.4.2 | Same as the release image |
 | Ninja | 1.13.2 | Same as the release image |
