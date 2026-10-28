@@ -61,7 +61,7 @@ cd ~/dotfiles
 | `--llvm [version]` | Show or change which LLVM/Clang version the toolchain runs on this machine — see [Choosing an LLVM version](#choosing-an-llvm-version) |
 | `-h`, `--help` | Show usage |
 
-`--setup` runs `apt update && upgrade`, installs all tools listed below, sets Zsh as the default shell and Kitty as the default terminal. Safe to re-run — every step is skipped if already satisfied. Works from bash on a fresh machine; log out and back in afterwards so the session starts with Zsh, then open Kitty. Tested from a fresh Ubuntu 26.04 install; used daily on 24.04.
+`--setup` runs `apt update && upgrade`, installs all tools listed below, sets Zsh as the default shell and Kitty as the default terminal, and sets up [serial port access](#serial-ports). Safe to re-run — every step is skipped if already satisfied. Works from bash on a fresh machine; log out and back in afterwards so the session starts with Zsh, then open Kitty. Tested from a fresh Ubuntu 26.04 install; used daily on 24.04.
 
 `--setup` ends with the same checks `--verify` runs on its own. They exercise the tools rather than just looking for them on `PATH` — compile and run C and C++ with both gcc and clang, cross-compile for cortex-m4 and link against newlib, drive `clangd`, build a throwaway CMake project with Ninja, confirm every tool is at its [pinned version](#pinned-tool-versions), and scan for dangling symlinks. A failed check is an `✗` line and a non-zero exit, so a run can't report success over a broken toolchain. Needs no sudo.
 
@@ -194,6 +194,13 @@ One upstream wrinkle worth knowing about: LLVM renamed its Linux release assets 
 | [Zed](https://zed.dev/) | latest | GPU-accelerated collaborative editor (official installer) |
 | [Visual Studio Code](https://code.visualstudio.com/) | latest | Code editor (Microsoft apt repo) |
 | [Claude Code](https://claude.ai/code) | latest | Anthropic AI CLI (native installer in `~/.local/bin`; auto-updates, no sudo) |
+
+**Serial ports** — see [Serial ports](#serial-ports)
+
+| What | Description |
+|---|---|
+| `dialout` group | Adds you to it, so USB-serial adapters open without sudo or `chmod` |
+| `98-ftdi-latency.rules` | Copied into `/etc/udev/rules.d`; sets every FTDI port's latency timer to 1 ms on plug-in |
 
 ---
 
@@ -988,6 +995,19 @@ say) each `cd` used to stall the prompt waiting on the disk.
 
 ---
 
+## Serial ports
+
+`--setup` makes USB-serial adapters usable as soon as they are plugged in:
+
+- **Access.** Ubuntu gives every `ttyUSB*` and `ttyACM*` to the `dialout` group with read/write access, so `--setup` adds you to it. Log out and back in once for it to apply.
+- **Latency.** FTDI chips hold received bytes for up to 16 ms before sending a short packet, which stalls request/response protocols. [`etc/udev/rules.d/98-ftdi-latency.rules`](etc/udev/rules.d/98-ftdi-latency.rules) sets that timer to 1 ms on every FTDI port. It matches the kernel driver (`ftdi_sio`), not a vendor/product ID or serial number, so it covers FT232R, FT2232, FT4232, FT232H and every other chip the driver supports. Other chips (CH340/CH343, CP210x, CDC-ACM) have no latency timer on Linux and are left alone.
+
+The rule is copied into `/etc/udev/rules.d`, not symlinked, and takes effect from the next plug-in. Check a port with `cat /sys/bus/usb-serial/devices/ttyUSB0/latency_timer`. `--verify` fails when you are not in `dialout` or the installed rule differs from the repo's.
+
+Per-device names and exceptions are machine-specific, so they stay out of the repo. Put them in a `99-*.rules` file in `/etc/udev/rules.d`: it runs after this one, so a `RUN` there can set a different latency for one adapter.
+
+---
+
 ## Structure
 
 ```
@@ -1076,6 +1096,10 @@ dotfiles/
 ├── .zshrc.local.personal
 ├── .zshrc.local.work
 ├── .gitattributes                     # runs git-filters/zed-theme on Zed's settings.json
+├── etc/
+│   └── udev/
+│       └── rules.d/
+│           └── 98-ftdi-latency.rules  # copied to /etc by --setup: 1 ms latency on every FTDI port
 ├── git-filters/
 │   └── zed-theme                      # keeps the theme picker's Zed edits out of git status
 ├── LICENSE                            # MIT

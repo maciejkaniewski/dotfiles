@@ -2095,6 +2095,43 @@ install_zed() {
     || log_error "Zed" "install failed"
 }
 
+# ── Serial ports ─────────────────────────────────────────────────────────────────
+# USB-serial adapters (ttyUSB*, ttyACM*) belong to the dialout group, so
+# membership is what lets you open one without sudo or chmod. The udev rule
+# drops every FTDI port's latency timer from 16 ms to 1 ms when it is plugged
+# in. It is copied, not symlinked: udev reads rules.d before home directories
+# are guaranteed to be mounted.
+UDEV_RULES=(98-ftdi-latency.rules)
+
+install_serial_access() {
+  local groups; groups=$(id -nG "$USER")
+  if [[ " $groups " == *" dialout "* ]]; then
+    log_skip "$USER in dialout (serial ports open without sudo)"
+  elif sudo usermod -aG dialout "$USER"; then
+    log_ok "$USER added to dialout (serial ports open without sudo)"
+    NEED_RESTART=true
+  else
+    log_error "dialout" "could not add $USER — run manually: sudo usermod -aG dialout $USER"
+  fi
+
+  local rule src dst changed=false
+  for rule in "${UDEV_RULES[@]}"; do
+    src="$DOTFILES/etc/udev/rules.d/$rule" dst="/etc/udev/rules.d/$rule"
+    if cmp -s "$src" "$dst"; then
+      log_skip "$dst"
+    elif sudo install -m 644 -o root -g root "$src" "$dst"; then
+      log_ok "$dst"; changed=true
+    else
+      log_error "$rule" "could not install into /etc/udev/rules.d"
+    fi
+  done
+  if [[ "$changed" == true ]]; then
+    sudo udevadm control --reload \
+      && log_ok "udev rules reloaded (applies from the next plug-in)" \
+      || log_error "udev" "reload failed — run manually: sudo udevadm control --reload"
+  fi
+}
+
 # Prompts "<label> [<default>]: " and stores the reply, or the default when the
 # reply is empty, in the variable named by $3.
 ask_default() {
@@ -2636,6 +2673,20 @@ verify_shell_lint() {
   echo 'install.sh passes shellcheck (warnings and up)'
 }
 
+# The group database, not `id -nG` with no argument: a user added during this
+# --setup run is a member from the next login, and the check should already
+# pass rather than tell them to fix what --setup just did.
+verify_serial_access() {
+  local rule
+  [[ " $(id -nG "$USER") " == *" dialout "* ]] \
+    || { echo "$USER not in dialout (run --setup)"; return 1; }
+  for rule in "${UDEV_RULES[@]}"; do
+    cmp -s "$DOTFILES/etc/udev/rules.d/$rule" "/etc/udev/rules.d/$rule" \
+      || { echo "/etc/udev/rules.d/$rule missing or out of date (run --setup)"; return 1; }
+  done
+  echo 'in dialout; FTDI latency rule installed'
+}
+
 # dpkg -C rather than `apt-get check` on purpose: it needs no sudo, and this
 # runs after the keepalive is dropped.
 verify_dpkg_state() {
@@ -2663,6 +2714,7 @@ verify_install() {
   vcheck "cmake + ninja"     verify_cmake_ninja
   vcheck "CLI tools"         verify_cli_tools
   vcheck "symlinks"          verify_symlinks
+  vcheck "serial ports"      verify_serial_access
   vcheck "shell lint"        verify_shell_lint
   vcheck "dpkg state"        verify_dpkg_state
 
@@ -2735,6 +2787,9 @@ cmd_setup() {
   install_vscode
   install_claude
 
+  section "Serial ports"
+  install_serial_access
+
   # Nothing past this point needs sudo — stop refreshing the credential so the
   # background loop can't contend with the interactive [y/N] prompts below for
   # the controlling terminal.
@@ -2765,7 +2820,7 @@ cmd_setup() {
   if (( FAIL_COUNT > 0 )); then
     echo -e "\r\033[K  ${RED}${BOLD}Done with ${FAIL_COUNT} error(s).${RESET} ${SUBTEXT}See the ✗ lines above; re-run ./install.sh --setup to retry.${RESET}"
   elif [[ "$NEED_RESTART" == true ]]; then
-    echo -e "\r\033[K  ${MAUVE}${BOLD}Done!${RESET} ${YELLOW}Log out and back in, then open Kitty: the new login shell (Zsh) starts with the next session.${RESET}"
+    echo -e "\r\033[K  ${MAUVE}${BOLD}Done!${RESET} ${YELLOW}Log out and back in, then open Kitty: the new login shell (Zsh) and group memberships start with the next session.${RESET}"
   else
     echo -e "\r\033[K  ${MAUVE}${BOLD}Done!${RESET} ${TEXT}Everything is set up.${RESET}"
   fi
@@ -3058,6 +3113,9 @@ usage() {
   echo -e "      ${SUBTEXT}Zed                  ${TEXT}official installer script${RESET}"
   echo -e "      ${SUBTEXT}Visual Studio Code   ${TEXT}Microsoft apt repo${RESET}"
   echo -e "      ${SUBTEXT}Claude Code          ${TEXT}Anthropic CLI (native installer, auto-updates)${RESET}"
+  echo -e "    ${TEXT}${BOLD}Serial ports${RESET}"
+  echo -e "      ${SUBTEXT}dialout group        ${TEXT}open USB-serial adapters without sudo or chmod${RESET}"
+  echo -e "      ${SUBTEXT}FTDI latency rule    ${TEXT}udev sets every FTDI port's latency timer to 1 ms on plug-in${RESET}"
   echo -e "    ${TEXT}${BOLD}Configuration${RESET}"
   echo -e "      ${SUBTEXT}Dotfile symlinks${RESET}"
   echo -e "      ${SUBTEXT}Theme                ${TEXT}pick Catppuccin (frappe/macchiato/mocha), Gruvbox Dark, or Dracula — kitty + bat + nvim + fzf + eza + tab bar + btop + zsh-syntax-highlighting + lazygit + delta + Zed + Powerlevel10k${RESET}"
