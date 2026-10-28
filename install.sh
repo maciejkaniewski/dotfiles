@@ -81,6 +81,16 @@ log_error() {
 
 command_exists() { command -v "$1" &>/dev/null; }
 
+# The header every command opens with. Ends with the tag HEAD carries, else
+# its short hash, so a run's output says which version of the repo it was;
+# left off when there is no git history to ask (a downloaded archive).
+banner() {
+  local version
+  version=$(git -C "$DOTFILES" describe --tags --exact-match 2>/dev/null \
+    || git -C "$DOTFILES" rev-parse --short HEAD 2>/dev/null)
+  echo -e "\r\033[K  ${MAUVE}${BOLD}dotfiles${RESET} ${SUBTEXT}· Maciej Kaniewski${version:+ · ${version}}${RESET}"
+}
+
 # Forces the terminal back to a known-good input mode right before a `read`
 # that needs one. Something intermittent earlier in --setup (apt/dpkg
 # maintainer scripts, most likely — never pinned down to one exact line, and
@@ -2725,7 +2735,7 @@ verify_install() {
 
 cmd_setup() {
   echo
-  echo -e "\r\033[K  ${MAUVE}${BOLD}dotfiles${RESET} ${SUBTEXT}· Maciej Kaniewski${RESET}"
+  banner
 
   # Everything after this needs sudo, so without it there is nothing to continue
   # into: each later step would fail in turn and bury the one real cause.
@@ -2833,7 +2843,7 @@ cmd_setup() {
 # without sitting through a full run (nothing here needs sudo either).
 cmd_verify() {
   echo
-  echo -e "\r\033[K  ${MAUVE}${BOLD}dotfiles${RESET} ${SUBTEXT}· Maciej Kaniewski${RESET}"
+  banner
 
   verify_install
 
@@ -2850,7 +2860,7 @@ cmd_verify() {
 # the theme or the git profile doesn't mean sitting through a full bootstrap.
 cmd_theme() {
   echo
-  echo -e "\r\033[K  ${MAUVE}${BOLD}dotfiles${RESET} ${SUBTEXT}· Maciej Kaniewski${RESET}"
+  banner
 
   configure_theme
 
@@ -2861,7 +2871,7 @@ cmd_theme() {
 
 cmd_identity() {
   echo
-  echo -e "\r\033[K  ${MAUVE}${BOLD}dotfiles${RESET} ${SUBTEXT}· Maciej Kaniewski${RESET}"
+  banner
 
   configure_identity
 
@@ -2872,7 +2882,7 @@ cmd_identity() {
 
 cmd_link() {
   echo
-  echo -e "\r\033[K  ${MAUVE}${BOLD}dotfiles${RESET} ${SUBTEXT}· Maciej Kaniewski${RESET}"
+  banner
 
   local section_l src dst last_section=""
   for entry in "${LINKS[@]}"; do
@@ -2896,7 +2906,7 @@ cmd_link() {
 
 cmd_clean() {
   echo
-  echo -e "\r\033[K  ${MAUVE}${BOLD}dotfiles${RESET} ${SUBTEXT}· Maciej Kaniewski${RESET}"
+  banner
 
   section "Removing symlinks"
   local section_l src dst
@@ -2933,7 +2943,7 @@ cmd_clean() {
 cmd_llvm() {
   local spec="${1:-}"
   echo
-  echo -e "\r\033[K  ${MAUVE}${BOLD}dotfiles${RESET} ${SUBTEXT}· Maciej Kaniewski${RESET}"
+  banner
 
   local pin; pin=$(llvm_pin)
 
@@ -3046,7 +3056,7 @@ cmd_llvm() {
 
 usage() {
   echo
-  echo -e "\r\033[K  ${MAUVE}${BOLD}dotfiles${RESET} ${SUBTEXT}· Maciej Kaniewski${RESET}"
+  banner
   echo
   echo -e "  ${TEXT}${BOLD}Usage:${RESET}"
   echo -e "    ${GREEN}./install.sh${RESET}               ${SUBTEXT}Create dotfile symlinks${RESET}"
