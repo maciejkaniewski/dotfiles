@@ -125,15 +125,43 @@ zstyle ':completion:*:*:*:*:*' menu no
 zstyle ':completion:*:descriptions' format '[%d]'
 zstyle ':fzf-tab:*' use-fzf-default-opts yes
 command -v eza &>/dev/null && zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza -1 --icons=always --color=always $realpath'
-# Host completion (ssh, scp, s) leaves out IP addresses unless asked, and most
-# machines on a local network have no name to complete instead.
-zstyle ':completion:*:hosts' use-ip yes
-# It also reads known_hosts once per shell, on the first host Tab, so a machine
-# you first logged in to after that never showed up. Dropping the list after
-# every command makes the next host Tab read the file again.
-_forget_cached_hosts() { unset _cache_hosts }
-autoload -Uz add-zsh-hook
-add-zsh-hook precmd _forget_cached_hosts
+# Host completion (ssh, scp, s) is built here instead of by zsh, which left out
+# IP addresses (most machines on a local network have no name to complete
+# instead), read known_hosts once per shell (a machine first logged in to after
+# that never showed up) and offered a Host alias from ~/.ssh/config only when
+# nothing else matched (an empty Tab never listed it). This list has getent's
+# names and addresses, known_hosts and every Host alias in ~/.ssh/config and
+# the files it includes, and it is read again on every Tab.
+_completion_hosts() {
+  local -a files=(~/.ssh/config) known
+  local file key rest word
+  reply=(${=${(f)"$(getent hosts)"}})
+  # known_hosts: hostnames before the key, comma-separated; [host]:port keeps
+  # the host. Hashed entries (|1|…) and wildcards have no name to offer.
+  [[ -r ~/.ssh/known_hosts ]] && known=(${(f)"$(<~/.ssh/known_hosts)"})
+  known=(${(s:,:)${(j:,:)known%%[ |#]*}})
+  for word in $known; do
+    [[ $word == \[*\]:* ]] && word=${${word#\[}%%\]*}
+    [[ $word == *[*?]* ]] || reply+=($word)
+  done
+  # Include paths are relative to ~/.ssh and may be globs.
+  while (( $#files )); do
+    file=$files[1]; shift files
+    [[ -r $file ]] || continue
+    while read -r key rest; do
+      case ${(L)key} in
+        include)
+          for word in ${(z)rest}; do
+            [[ $word == [/~]* ]] || word=~/.ssh/$word
+            files+=(${~word}(N))
+          done ;;
+        host) reply+=(${${(z)rest}:#*[*?!]*}) ;;
+      esac
+    done < $file
+  done
+  reply=(${(u)reply:#})
+}
+zstyle -e ':completion:*:hosts' hosts '_completion_hosts'
 
 # fzf-git — Ctrl+G then Ctrl+F/B/H/T/S/R puts git files, branches, commit
 # hashes, tags, stashes or remotes at the cursor; Ctrl+G ? lists them all.
