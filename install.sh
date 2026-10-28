@@ -81,13 +81,13 @@ log_error() {
 
 command_exists() { command -v "$1" &>/dev/null; }
 
-# The header every command opens with. Ends with the tag HEAD carries, else
-# its short hash, so a run's output says which version of the repo it was;
-# left off when there is no git history to ask (a downloaded archive).
+# The header every command opens with. Ends with the version of the repo the
+# run used: the tag on HEAD (v1.0.0), or past one the commits since and the
+# hash (v1.0.0-3-gabc1234), or just the hash before any tag. Left off when
+# there is no git history to ask (a downloaded archive).
 banner() {
   local version
-  version=$(git -C "$DOTFILES" describe --tags --exact-match 2>/dev/null \
-    || git -C "$DOTFILES" rev-parse --short HEAD 2>/dev/null)
+  version=$(git -C "$DOTFILES" describe --tags --always 2>/dev/null)
   echo -e "\r\033[K  ${MAUVE}${BOLD}dotfiles${RESET} ${SUBTEXT}· Maciej Kaniewski${version:+ · ${version}}${RESET}"
 }
 
