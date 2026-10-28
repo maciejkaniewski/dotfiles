@@ -462,6 +462,7 @@ LINKS=(
   "Shell|$DOTFILES/.p10k.zsh:$HOME/.p10k.zsh"
   "Git|$DOTFILES/.gitconfig:$HOME/.gitconfig"
   "Git|$DOTFILES/.local/bin/git-credential-bw:$HOME/.local/bin/git-credential-bw"
+  "Utilities|$DOTFILES/.local/bin/ports:$HOME/.local/bin/ports"
   "SSH|$DOTFILES/.ssh/config:$HOME/.ssh/config"
   "Kitty|$DOTFILES/.config/kitty/kitty.conf:$HOME/.config/kitty/kitty.conf"
   "Kitty|$DOTFILES/.config/kitty/tab_bar.py:$HOME/.config/kitty/tab_bar.py"
@@ -2615,7 +2616,7 @@ verify_cmake_ninja() {
 
 verify_cli_tools() {
   local d="$VERIFY_TMP" t
-  for t in bat delta fzf rg fd jq eza zoxide direnv dust duf btop lazygit glab tree-sitter bw uv nvim; do
+  for t in bat delta fzf rg fd jq eza zoxide direnv dust duf btop lazygit glab tree-sitter bw uv nvim ports; do
     command_exists "$t" || { echo "$t not found on PATH"; return 1; }
   done
   # On PATH is not enough: a prebuilt linked against a newer glibc than the
@@ -2634,6 +2635,7 @@ verify_cli_tools() {
   printf 'a\nb\n' | fzf --filter=a >/dev/null 2>&1 || { echo 'fzf --filter failed'; return 1; }
   eza "$d" >/dev/null 2>&1                     || { echo 'eza failed to list a directory'; return 1; }
   nvim --headless +q >/dev/null 2>&1           || { echo 'nvim failed to start headless'; return 1; }
+  ports >/dev/null 2>&1                        || { echo "ports failed: $(ports 2>&1 | head -1)"; return 1; }
   # kitty --version runs without them; only opening a window loads the GLFW
   # backends, so a missing X11/Wayland library shows up only at first launch.
   local so missing
@@ -2642,7 +2644,7 @@ verify_cli_tools() {
     missing=$(ldd "$so" 2>/dev/null | awk '/not found/ {print $1}' | tr '\n' ' ')
     [[ -z "$missing" ]] || { echo "kitty cannot open a window: ${missing% } missing (run --setup)"; return 1; }
   done
-  echo 'bat, delta, fzf, rg, fd, jq, eza, zoxide, direnv, dust, duf, btop, lazygit, glab, tree-sitter, bw, uv, nvim all run; kitty can open a window'
+  echo 'bat, delta, fzf, rg, fd, jq, eza, zoxide, direnv, dust, duf, btop, lazygit, glab, tree-sitter, bw, uv, nvim, ports all run; kitty can open a window'
 }
 
 # A dangling symlink is the signature failure of this install model: /opt trees
@@ -3116,6 +3118,7 @@ usage() {
   echo -e "    ${TEXT}${BOLD}Serial ports${RESET}"
   echo -e "      ${SUBTEXT}dialout group        ${TEXT}open USB-serial adapters without sudo or chmod${RESET}"
   echo -e "      ${SUBTEXT}FTDI latency rule    ${TEXT}udev sets every FTDI port's latency timer to 1 ms on plug-in${RESET}"
+  echo -e "      ${SUBTEXT}ports                ${TEXT}list USB serial ports, -w to watch plug/unplug${RESET}"
   echo -e "    ${TEXT}${BOLD}Configuration${RESET}"
   echo -e "      ${SUBTEXT}Dotfile symlinks${RESET}"
   echo -e "      ${SUBTEXT}Theme                ${TEXT}pick Catppuccin (frappe/macchiato/mocha), Gruvbox Dark, or Dracula — kitty + bat + nvim + fzf + eza + tab bar + btop + zsh-syntax-highlighting + lazygit + delta + Zed + Powerlevel10k${RESET}"

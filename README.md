@@ -201,6 +201,7 @@ One upstream wrinkle worth knowing about: LLVM renamed its Linux release assets 
 |---|---|
 | `dialout` group | Adds you to it, so USB-serial adapters open without sudo or `chmod` |
 | `98-ftdi-latency.rules` | Copied into `/etc/udev/rules.d`; sets every FTDI port's latency timer to 1 ms on plug-in |
+| `ports` | Lists USB serial ports and watches them being plugged in and out (linked into `~/.local/bin`) |
 
 ---
 
@@ -1006,6 +1007,38 @@ The rule is copied into `/etc/udev/rules.d`, not symlinked, and takes effect fro
 
 Per-device names and exceptions are machine-specific, so they stay out of the repo. Put them in a `99-*.rules` file in `/etc/udev/rules.d`: it runs after this one, so a `RUN` there can set a different latency for one adapter.
 
+**`ports`** shows what is plugged in, from udev and `/sys` (no root needed):
+
+```
+$ ports
+DEVICE        ALIAS            PRODUCT            SERIAL  DRIVER    LATENCY  PORT  STABLE PATH
+/dev/ttyUSB0  /dev/FT2232_CH0  Dual RS232-HS (A)  —       ftdi_sio  1 ms     3-1   /dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if00-port0
+/dev/ttyUSB1  /dev/FT2232_CH1  Dual RS232-HS (B)  —       ftdi_sio  1 ms     3-1   /dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if01-port0
+
+$ ports -w
+DEVICE        ALIAS            PRODUCT            SERIAL  DRIVER    LATENCY  PORT  STABLE PATH
+/dev/ttyUSB0  /dev/FT2232_CH0  Dual RS232-HS (A)  —       ftdi_sio  1 ms     3-1   /dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if00-port0
+/dev/ttyUSB1  /dev/FT2232_CH1  Dual RS232-HS (B)  —       ftdi_sio  1 ms     3-1   /dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if01-port0
+
+Watching for plug and unplug — Ctrl-C to stop
+20:24:36  − /dev/ttyUSB0  /dev/FT2232_CH0  Dual RS232-HS (A)  —
+20:24:36  − /dev/ttyUSB1  /dev/FT2232_CH1  Dual RS232-HS (B)  —
+20:24:38  + /dev/ttyUSB0  /dev/FT2232_CH0  Dual RS232-HS (A)  —         ftdi_sio  1 ms  USB port 3-1
+20:24:38  + /dev/ttyUSB1  /dev/FT2232_CH1  Dual RS232-HS (B)  —         ftdi_sio  1 ms  USB port 3-1
+20:24:41  − /dev/ttyUSB0  /dev/FT2232_CH0  Dual RS232-HS (A)  —
+20:24:41  − /dev/ttyUSB1  /dev/FT2232_CH1  Dual RS232-HS (B)  —
+20:24:43  + /dev/ttyUSB0                   FT232R USB UART    B00329ZK  ftdi_sio  1 ms  USB port 3-1
+```
+
+| Command | Does |
+|---|---|
+| `ports` | Lists every USB serial port: product string, serial number, driver, latency timer, USB port and stable path. FT2232/FT4232 channels are named `(A)`, `(B)`, … A name a local udev rule gives a port (`SYMLINK+="FT2232_CH0"`) shows in an ALIAS column, which appears only when some port has one |
+| `ports -w` | Lists them, then prints a timestamped `+` or `−` line each time an adapter is plugged in or out, until `Ctrl-C` |
+
+Colours follow the theme picked with `--theme`, in the same roles as the prompt; the latency shows green at 1 ms and orange at anything else. Piped output is plain text.
+
+The stable path (`/dev/serial/by-id/…`) is created by udev for every adapter. It names the adapter by its product and serial number, so it stays the same whichever USB socket it is in and whichever `ttyUSB` number it gets — usually no need for a per-device alias. Pass it to any tool that takes a port, e.g. `--LINK_UART_PORT`.
+
 ---
 
 ## Structure
@@ -1086,7 +1119,8 @@ dotfiles/
 ├── .gitconfig
 ├── .local/
 │   └── bin/
-│       └── git-credential-bw          # git credential helper — HTTPS logins from the Bitwarden vault
+│       ├── git-credential-bw          # git credential helper — HTTPS logins from the Bitwarden vault
+│       └── ports                      # list / watch USB serial ports
 ├── .p10k.zsh
 ├── .ssh/
 │   ├── config                         # shared client settings, includes ~/.ssh/config.local first

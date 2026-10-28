@@ -1,0 +1,241 @@
+#!/usr/bin/env bash
+# ports — list the USB serial adapters plugged in, or follow them being
+# plugged in and out.
+#
+# Everything comes from udev and /sys, so it needs no root and nothing beyond
+# udevadm. Only USB serial ports are listed: ttyS* and other built-in ttys
+# are not adapters.
+
+usage() {
+  cat <<'EOF'
+Usage: ports     list USB serial ports
+       ports -w  list them, then print a line per plug and unplug (Ctrl-C stops)
+EOF
+}
+
+# Colours from the theme install.sh --theme picked (~/.config/theme/current),
+# in the same roles as the prompt: blue for the device, as for the directory,
+# green/yellow/red for good/warn/bad, the theme's comment grey for secondary
+# text. Dracula has no blue, so cyan takes that role there, as in its p10k
+# file. No theme file falls back to the terminal's 16 colours; piped output
+# is plain text.
+theme_colours() {
+  local family variant hex
+  [[ -r $HOME/.config/theme/current ]] && read -r family variant < "$HOME/.config/theme/current"
+  #        text   dim    blue   green  red    yellow peach  mauve  teal
+  case "$family-$variant" in
+    catppuccin-frappe)    hex=(c6d0f5 838ba7 8caaee a6d189 e78284 e5c890 ef9f76 ca9ee6 81c8be) ;;
+    catppuccin-macchiato) hex=(cad3f5 8087a2 8aadf4 a6da95 ed8796 eed49f f5a97f c6a0f6 8bd5ca) ;;
+    catppuccin-mocha)     hex=(cdd6f4 7f849c 89b4fa a6e3a1 f38ba8 f9e2af fab387 cba6f7 94e2d5) ;;
+    gruvbox-dark)         hex=(ebdbb2 928374 83a598 b8bb26 fb4934 fabd2f fe8019 d3869b 8ec07c) ;;
+    dracula-*)            hex=(f8f8f2 6272a4 8be9fd 50fa7b ff5555 f1fa8c ffb86c bd93f9 ff79c6) ;;
+    *)
+      TEXT='' DIM=$'\e[2m' BLUE=$'\e[34m' GREEN=$'\e[32m' RED=$'\e[31m'
+      YELLOW=$'\e[33m' PEACH=$'\e[33m' MAUVE=$'\e[35m' TEAL=$'\e[36m'
+      return ;;
+  esac
+  local -a c
+  local h
+  for h in "${hex[@]}"; do
+    c+=("$(printf '\e[38;2;%d;%d;%dm' "0x${h:0:2}" "0x${h:2:2}" "0x${h:4:2}")")
+  done
+  TEXT=${c[0]} DIM=${c[1]} BLUE=${c[2]} GREEN=${c[3]} RED=${c[4]}
+  YELLOW=${c[5]} PEACH=${c[6]} MAUVE=${c[7]} TEAL=${c[8]}
+}
+
+if [[ -t 1 ]]; then
+  BOLD=$'\e[1m' RESET=$'\e[0m'
+  theme_colours
+else
+  BOLD='' RESET='' TEXT='' DIM='' BLUE='' GREEN='' RED='' YELLOW='' PEACH='' MAUVE='' TEAL=''
+fi
+
+# 1 ms is what the udev rule sets; anything else is worth noticing.
+latency_colour() {
+  case $1 in
+    "1 ms") printf '%s' "$GREEN" ;;
+    —)      printf '%s' "$DIM" ;;
+    *)      printf '%s' "$PEACH" ;;
+  esac
+}
+
+declare -A P   # udev properties of the device being described
+
+# Loads one tty's udev properties into P.
+load_props() {
+  local k v
+  P=()
+  while IFS='=' read -r k v; do
+    [[ -n "$k" ]] && P[$k]=$v
+  done < <(udevadm info -q property -n "$1" 2>/dev/null)
+}
+
+# Prints the USB ttys, one /dev path per line, in name order.
+usb_ttys() {
+  local t
+  for t in /sys/class/tty/*; do
+    [[ "$(readlink -f "$t")" == */usb* ]] && echo "/dev/${t##*/}"
+  done | sort -V
+}
+
+# Pads $1 with spaces to $2 characters. printf's own %-*s pads to a byte
+# count, which comes up short on anything non-ASCII, such as the — placeholder.
+pad() { printf '%s%*s' "$1" $(( $2 - ${#1} )) ''; }
+
+# Describes the device in P as tab-separated fields:
+# device, product, serial, driver, latency, USB port, stable path, aliases.
+describe() {
+  local name=${P[DEVNAME]##*/} product serial driver latency port path link aliases=()
+
+  # The product string from the USB descriptor, which vendors often set to
+  # something telling ("Quiver Debug"); ID_MODEL has its spaces replaced.
+  product=$(printf '%b' "${P[ID_MODEL_ENC]:-${P[ID_MODEL]:-?}}")
+  product=${product%"${product##*[![:space:]]}"}
+  # FT2232 and FT4232 expose one tty per channel; name the channel.
+  if [[ ${P[ID_VENDOR_ID]} == 0403 && ${P[ID_MODEL_ID]} =~ ^(6010|6011)$ && -n ${P[ID_USB_INTERFACE_NUM]} ]]; then
+    local channels=(A B C D)
+    product+=" (${channels[10#${P[ID_USB_INTERFACE_NUM]}]})"
+  fi
+
+  serial=${P[ID_SERIAL_SHORT]:-—}
+  driver=${P[ID_USB_DRIVER]:-—}
+
+  # Only ftdi_sio exposes it; read at call time, after udev's rules have run.
+  if [[ -r /sys/class/tty/$name/device/latency_timer ]]; then
+    latency="$(< "/sys/class/tty/$name/device/latency_timer") ms"
+  else
+    latency=—
+  fi
+
+  # The USB port is the part of the device path before the interface
+  # (…/3-1/3-1:1.0/ttyUSB0 → 3-1); hubs add dotted levels (3-1.2).
+  [[ ${P[DEVPATH]} =~ /([0-9]+-[0-9.]+):[0-9]+\.[0-9]+/ ]] && port=${BASH_REMATCH[1]} || port=—
+
+  # by-id stays the same whichever USB port the adapter is in and whatever
+  # ttyUSB number it gets; by-path is next best for adapters without a serial.
+  # Any link outside /dev/serial is a name a local udev rule gave the port
+  # (SYMLINK+="FT2232_CH0").
+  path=${P[DEVNAME]}
+  for link in ${P[DEVLINKS]}; do
+    case $link in
+      /dev/serial/by-id/*)   [[ $path == /dev/serial/by-id/* ]] || path=$link ;;
+      /dev/serial/by-path/*) [[ $path == /dev/serial/* ]] || path=$link ;;
+      *)                     aliases+=("$link") ;;
+    esac
+  done
+  link=$(IFS=,; echo "${aliases[*]}")
+
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${P[DEVNAME]}" "$product" "$serial" "$driver" "$latency" "$port" "$path" "${link//,/, }"
+}
+
+# Prints a table of every USB serial port, or a dim note when there are none.
+list() {
+  local dev rows=()
+  while IFS= read -r dev; do
+    load_props "$dev"
+    rows+=("$(describe)")
+  done < <(usb_ttys)
+
+  if (( ${#rows[@]} == 0 )); then
+    echo "${DIM}No USB serial ports${RESET}"; return
+  fi
+
+  # Widths of DEVICE PRODUCT SERIAL DRIVER LATENCY PORT, then ALIAS (field 7),
+  # which is shown only when some port has one.
+  local -a w=(6 7 6 6 7 4 0 5)
+  local row i f alias_head='' alias_cell
+  for row in "${rows[@]}"; do
+    IFS=$'\t' read -ra f <<<"$row"
+    for i in 0 1 2 3 4 5 7; do (( ${#f[i]} > w[i] )) && w[i]=${#f[i]}; done
+    [[ -n ${f[7]} ]] && alias_head=1
+  done
+  [[ -n $alias_head ]] && alias_head="$(pad ALIAS "${w[7]}")  "
+
+  # Colours go outside each padded field, so escapes don't count as width.
+  echo "${DIM}${BOLD}$(pad DEVICE "${w[0]}")  ${alias_head}$(pad PRODUCT "${w[1]}")  $(pad SERIAL "${w[2]}")  $(pad DRIVER "${w[3]}")  $(pad LATENCY "${w[4]}")  $(pad PORT "${w[5]}")  STABLE PATH${RESET}"
+  for row in "${rows[@]}"; do
+    IFS=$'\t' read -ra f <<<"$row"
+    alias_cell=''
+    [[ -n $alias_head ]] && alias_cell="${BLUE}$(pad "${f[7]:-—}" "${w[7]}")${RESET}  "
+    echo "${BLUE}${BOLD}$(pad "${f[0]}" "${w[0]}")${RESET}  ${alias_cell}${TEXT}$(pad "${f[1]}" "${w[1]}")${RESET}  ${YELLOW}$(pad "${f[2]}" "${w[2]}")${RESET}  ${MAUVE}$(pad "${f[3]}" "${w[3]}")${RESET}  $(latency_colour "${f[4]}")$(pad "${f[4]}" "${w[4]}")${RESET}  ${TEAL}$(pad "${f[5]}" "${w[5]}")${RESET}  ${DIM}${f[6]}${RESET}"
+  done
+}
+
+# Column widths for -w lines, indexed like describe's fields (0 device,
+# 1 product, 2 serial, 3 driver, 4 latency, 7 alias). Lines print one at a
+# time, so they can't be sized from the whole list the way the table is.
+# widen only ever grows a column: lines already printed stay aligned with
+# every later one unless a longer value turns up. The alias column appears
+# once some port has an alias, blank for those without.
+W=([0]=12 [1]=17 [2]=8 [3]=8 [4]=4 [7]=0)
+widen() {
+  local -a f
+  local i
+  IFS=$'\t' read -ra f <<<"$1"
+  for i in 0 1 2 3 4 7; do (( ${#f[i]} > W[i] )) && W[i]=${#f[i]}; done
+}
+
+# The device, alias, product and serial cells of a -w line, padded to W.
+event_cells() {
+  local -a f
+  local out
+  IFS=$'\t' read -ra f <<<"$1"
+  out="${BLUE}${BOLD}$(pad "${f[0]}" "${W[0]}")${RESET}  "
+  (( W[7] )) && out+="${BLUE}$(pad "${f[7]}" "${W[7]}")${RESET}  "
+  out+="${TEXT}$(pad "${f[1]}" "${W[1]}")${RESET}  ${YELLOW}$(pad "${f[2]}" "${W[2]}")${RESET}"
+  printf '%s' "$out"
+}
+
+# One line per udev add/remove of a USB tty. A remove is described from what
+# was seen when it was added (or listed at start), since by then the device
+# is gone from /sys.
+watch_ports() {
+  local -A seen
+  local dev line k v f
+
+  list
+  while IFS= read -r dev; do
+    load_props "$dev"
+    seen[$dev]=$(describe)
+    widen "${seen[$dev]}"
+  done < <(usb_ttys)
+  echo
+  echo "${DIM}Watching for plug and unplug — Ctrl-C to stop${RESET}"
+
+  # udevadm prints each event as KEY=value lines ending in a blank line. Only
+  # udev's events: the kernel's arrive before the rules (and the latency
+  # timer) have run, and carry no ID_* properties.
+  P=()
+  while IFS= read -r line; do
+    if [[ -n "$line" ]]; then
+      [[ "$line" == *=* ]] && { k=${line%%=*} v=${line#*=}; P[$k]=$v; }
+      continue
+    fi
+    if [[ -n ${P[DEVNAME]} && ${P[DEVPATH]} == */usb* ]]; then
+      dev=${P[DEVNAME]}
+      case ${P[ACTION]} in
+        add)
+          seen[$dev]=$(describe)
+          widen "${seen[$dev]}"
+          IFS=$'\t' read -ra f <<<"${seen[$dev]}"
+          printf "${DIM}%(%H:%M:%S)T${RESET}  ${GREEN}${BOLD}+${RESET} %s  ${MAUVE}%s${RESET}  %s%s${RESET}  ${TEAL}USB port %s${RESET}\n" \
+            -1 "$(event_cells "${seen[$dev]}")" "$(pad "${f[3]}" "${W[3]}")" \
+            "$(latency_colour "${f[4]}")" "$(pad "${f[4]}" "${W[4]}")" "${f[5]}"
+          ;;
+        remove)
+          [[ -n ${seen[$dev]} ]] || { seen[$dev]=$(describe); widen "${seen[$dev]}"; }
+          printf "${DIM}%(%H:%M:%S)T${RESET}  ${RED}${BOLD}−${RESET} %s\n" -1 "$(event_cells "${seen[$dev]}")"
+          unset "seen[$dev]"
+          ;;
+      esac
+    fi
+    P=()
+  done < <(stdbuf -oL udevadm monitor --udev --property --subsystem-match=tty)
+}
+
+case $1 in
+  "")         list ;;
+  -w|--watch) watch_ports ;;
+  -h|--help)  usage ;;
+  *)          usage >&2; exit 2 ;;
+esac
