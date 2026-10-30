@@ -28,7 +28,9 @@ vim.opt.lazyredraw = false     -- do not use lazyredraw (breaks noice)
 vim.keymap.set("n", "<Esc>", function()
     vim.cmd("nohlsearch")
     for _, win in ipairs(vim.api.nvim_list_wins()) do
-        if vim.api.nvim_win_get_config(win).relative ~= "" then
+        -- Closing one float can take its companions with it (treesitter-context,
+        -- noice and dropbar pair windows), so later ids in the list may be gone.
+        if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_config(win).relative ~= "" then
             vim.api.nvim_win_close(win, false)
         end
     end
