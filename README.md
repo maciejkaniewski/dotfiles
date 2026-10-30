@@ -145,6 +145,7 @@ One upstream wrinkle worth knowing about: LLVM renamed its Linux release assets 
 | [direnv](https://direnv.net/) | latest | Loads and unloads a directory's `.envrc` as you `cd` in and out; Powerlevel10k already has a segment for it (GitHub release) |
 | [dust](https://github.com/bootandy/dust) | latest | `du` with a tree and bars, biggest first (GitHub release) |
 | [duf](https://github.com/muesli/duf) | latest | `df` as a readable table of disks (GitHub `.deb`) |
+| [yazi](https://github.com/sxyazi/yazi) | latest | Terminal file manager with image, PDF and video previews drawn through Kitty's graphics protocol. Start it with `y`, which leaves the shell in the directory you quit in. `Enter` goes into a directory rather than opening it in nvim (the official smart-enter plugin, vendored in `.config/yazi/plugins`) (GitHub release, with its `ya` plugin manager) |
 | [btop](https://github.com/aristocratos/btop) | latest | Interactive process and resource monitor (GitHub release; theme follows the active theme picker) |
 | [jq](https://github.com/jqlang/jq) | latest | Command-line JSON processor, required by Claude Code status line (GitHub release) |
 | [Bitwarden CLI](https://bitwarden.com/help/cli/) | latest | `bw`, backs the git credential helper for HTTPS remotes — see [Bitwarden for git credentials](#bitwarden-for-git-credentials) (GitHub release `cli-v*`, native zip — no Node needed) |

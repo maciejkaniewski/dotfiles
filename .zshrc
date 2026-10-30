@@ -251,6 +251,18 @@ command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 # a few ms can race, and then one visit simply isn't counted.
 (( $+functions[__zoxide_hook] )) && __zoxide_hook() { \command zoxide add -- "$(__zoxide_pwd)" &! }
 
+# y — yazi, and the shell lands in whatever directory it was quit in (q;
+# Q quits without moving). A program can't change its parent shell's
+# directory, so yazi writes it to a file and this wrapper cds there.
+y() {
+  local tmp cwd
+  tmp=$(mktemp -t yazi-cwd.XXXXXX)
+  command yazi "$@" --cwd-file="$tmp"
+  IFS= read -r -d '' cwd < "$tmp"
+  [[ -n $cwd && $cwd != $PWD ]] && builtin cd -- "$cwd"
+  rm -f -- "$tmp"
+}
+
 # direnv — the hook that loads and unloads a directory's .envrc as you cd
 (( ! ${+commands[direnv]} )) || emulate zsh -c "$(direnv hook zsh)"
 

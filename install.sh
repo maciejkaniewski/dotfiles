@@ -491,6 +491,8 @@ LINKS=(
   "Utilities|$DOTFILES/.config/delta/gruvbox.gitconfig:$HOME/.config/delta/gruvbox.gitconfig"
   "Utilities|$DOTFILES/.config/delta/dracula.gitconfig:$HOME/.config/delta/dracula.gitconfig"
   "Utilities|$DOTFILES/.config/lazygit/config.yml:$HOME/.config/lazygit/config.yml"
+  "Utilities|$DOTFILES/.config/yazi/keymap.toml:$HOME/.config/yazi/keymap.toml"
+  "Utilities|$DOTFILES/.config/yazi/plugins/smart-enter.yazi:$HOME/.config/yazi/plugins/smart-enter.yazi"
 )
 
 # Splits a "Section|src:dst" entry into its three parts.
@@ -955,6 +957,38 @@ install_duf() {
     bash -c "sudo dpkg -i '$deb' && rm '$deb'" \
     && log_ok "duf $latest installed" \
     || log_error "duf" "install failed"
+}
+
+# yazi's zip holds one versionless top-level directory with two binaries: yazi
+# itself and ya, its plugin/flavor manager. Both come out of the static musl
+# build, so they run on any glibc.
+install_yazi() {
+  local latest
+  run_spin_capture "checking latest version..." latest github_latest "sxyazi/yazi"
+  if [[ -z "$latest" ]]; then
+    if command_exists yazi; then
+      log_skip "yazi $(yazi --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1) (could not check latest)"; return
+    else
+      log_error "yazi" "could not resolve latest version — network down? re-run once it is back"; return
+    fi
+  fi
+  if command_exists yazi; then
+    local v; v=$(yazi --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1)
+    if version_lt "$v" "$latest"; then
+      log_warn "yazi $v → upgrading to $latest"
+    else
+      log_skip "yazi $v"; return
+    fi
+  fi
+  local dir="yazi-${ARCH_GENERIC}-unknown-linux-musl"
+  local zip="$SCRIPT_TMPDIR/$dir.zip"
+  run_spin "downloading yazi $latest..." \
+    curl -fsSL "https://github.com/sxyazi/yazi/releases/download/v${latest}/${dir}.zip" -o "$zip" \
+    && log_ok "downloaded yazi $latest" || { log_error "yazi" "download failed"; return; }
+  run_spin "installing yazi $latest..." \
+    bash -c "unzip -o '$zip' -d '$SCRIPT_TMPDIR' '$dir/yazi' '$dir/ya' && sudo install -m755 '$SCRIPT_TMPDIR/$dir/yazi' '$SCRIPT_TMPDIR/$dir/ya' /usr/local/bin/" \
+    && log_ok "yazi $latest installed" \
+    || log_error "yazi" "install failed"
 }
 
 # CMake ships a full tree (bin/ + share/cmake-X.Y/ modules the binary loads
@@ -2626,7 +2660,7 @@ verify_cmake_ninja() {
 
 verify_cli_tools() {
   local d="$VERIFY_TMP" t
-  for t in bat delta fzf rg fd jq eza zoxide direnv dust duf btop lazygit glab tree-sitter bw uv nvim ports; do
+  for t in bat delta fzf rg fd jq eza zoxide direnv dust duf yazi btop lazygit glab tree-sitter bw uv nvim ports; do
     command_exists "$t" || { echo "$t not found on PATH"; return 1; }
   done
   # On PATH is not enough: a prebuilt linked against a newer glibc than the
@@ -2634,7 +2668,7 @@ verify_cli_tools() {
   tree-sitter --version >/dev/null 2>&1        || { echo "tree-sitter won't run: $(tree-sitter --version 2>&1 | head -1)"; return 1; }
   bw --version >/dev/null 2>&1                 || { echo "bw won't run: $(bw --version 2>&1 | head -1)"; return 1; }
   uv --version >/dev/null 2>&1                 || { echo "uv won't run: $(uv --version 2>&1 | head -1)"; return 1; }
-  for t in dust duf glab; do
+  for t in dust duf yazi glab; do
     "$t" --version >/dev/null 2>&1             || { echo "$t won't run: $("$t" --version 2>&1 | head -1)"; return 1; }
   done
   direnv version >/dev/null 2>&1               || { echo "direnv won't run: $(direnv version 2>&1 | head -1)"; return 1; }
@@ -2654,7 +2688,7 @@ verify_cli_tools() {
     missing=$(ldd "$so" 2>/dev/null | awk '/not found/ {print $1}' | tr '\n' ' ')
     [[ -z "$missing" ]] || { echo "kitty cannot open a window: ${missing% } missing (run --setup)"; return 1; }
   done
-  echo 'bat, delta, fzf, rg, fd, jq, eza, zoxide, direnv, dust, duf, btop, lazygit, glab, tree-sitter, bw, uv, nvim, ports all run; kitty can open a window'
+  echo 'bat, delta, fzf, rg, fd, jq, eza, zoxide, direnv, dust, duf, yazi, btop, lazygit, glab, tree-sitter, bw, uv, nvim, ports all run; kitty can open a window'
 }
 
 # A dangling symlink is the signature failure of this install model: /opt trees
@@ -2761,6 +2795,7 @@ cmd_setup() {
   install_direnv
   install_dust
   install_duf
+  install_yazi
   install_btop
   install_jq
   install_lazygit
@@ -3096,6 +3131,7 @@ usage() {
   echo -e "      ${SUBTEXT}direnv               ${TEXT}loads a directory's .envrc on cd (latest, GitHub release)${RESET}"
   echo -e "      ${SUBTEXT}dust                 ${TEXT}du with a visual tree (latest, GitHub release)${RESET}"
   echo -e "      ${SUBTEXT}duf                  ${TEXT}df with a readable table (latest, GitHub release)${RESET}"
+  echo -e "      ${SUBTEXT}yazi                 ${TEXT}terminal file manager with image previews (latest, GitHub release)${RESET}"
   echo -e "      ${SUBTEXT}btop                 ${TEXT}process/resource monitor (latest, GitHub release)${RESET}"
   echo -e "      ${SUBTEXT}jq                   ${TEXT}JSON processor, required by Claude Code status line (latest, GitHub release)${RESET}"
   echo -e "      ${SUBTEXT}lazygit              ${TEXT}terminal UI for git${RESET}"
