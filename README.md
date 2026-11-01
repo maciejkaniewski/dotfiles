@@ -1036,33 +1036,38 @@ Watching for plug and unplug — Ctrl-C to stop
 |---|---|
 | `ports` | Lists every USB serial port: product string, serial number, driver, latency timer, USB port and stable path. FT2232/FT4232 channels are named `(A)`, `(B)`, … A name a local udev rule gives a port (`SYMLINK+="FT2232_CH0"`) shows in an ALIAS column, which appears only when some port has one |
 | `ports -w` | Lists them, then prints a timestamped `+` or `−` line each time an adapter is plugged in or out, until `Ctrl-C` |
-| `ports share [DEVICE] [PORT]` | Shares DEVICE on the network on TCP PORT, now and at boot (below) |
-| `ports unshare` | Stops sharing, now and at boot |
+| `ports share DEVICE [PORT]` | Shares DEVICE on the network on TCP PORT as well as whatever is shared already, now and at boot, or moves it to PORT (below) |
+| `ports unshare DEVICE\|PORT` | Stops sharing that one; the others stay shared and connected |
+| `ports unshare [--all]` | Stops sharing all of them, now and at boot. Bare, only when one is shared; with several it lists them and asks which |
 
 Colours follow the theme picked with `--theme`, in the same roles as the prompt; the latency shows green at 1 ms and orange at anything else. Piped output is plain text.
 
 The stable path (`/dev/serial/by-id/…`) is created by udev for every adapter. It names the adapter by its product and serial number, so it stays the same whichever USB socket it is in and whichever `ttyUSB` number it gets — usually no need for a per-device alias. Pass it to any tool that takes a port.
 
-**`ports share`** shares one adapter on the network, so another machine opens it as `rfc2217://<host>:<port>` with any RFC 2217 client (pyserial's `serial_for_url`, for one), as if it were plugged in there. While it is shared, `ports` marks it in a SHARED column, which appears only then, and lists the address to give for each network:
+**`ports share`** shares adapters on the network, each on its own TCP port, so another machine opens one as `rfc2217://<host>:<port>` with any RFC 2217 client (pyserial's `serial_for_url`, for one), as if it were plugged in there. While any is shared, `ports` marks them in a SHARED column, which appears only then, and lists the address to give for each, on Ethernet when there is a cable, with who is connected:
 
 ```
 $ ports share ttyUSB1
-DEVICE        PRODUCT            SERIAL  DRIVER    LATENCY  PORT  SHARED  STABLE PATH
-/dev/ttyUSB0  Dual RS232-HS (A)  —       ftdi_sio  1 ms     3-1   —       /dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if00-port0
-/dev/ttyUSB1  Dual RS232-HS (B)  —       ftdi_sio  1 ms     3-1   :4000   /dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if01-port0
+$ ports share ttyACM0
+DEVICE        PRODUCT            SERIAL                    DRIVER    LATENCY  PORT  SHARED  STABLE PATH
+/dev/ttyACM0  STLINK-V3          001F00194142501720353451  cdc_acm   —        3-5   :4001   /dev/serial/by-id/usb-STMicroelectronics_STLINK-V3_001F00194142501720353451-if02
+/dev/ttyUSB0  Dual RS232-HS (A)  —                         ftdi_sio  1 ms     3-1   —       /dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if00-port0
+/dev/ttyUSB1  Dual RS232-HS (B)  —                         ftdi_sio  1 ms     3-1   :4000   /dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if01-port0
 
-● Shared on the network: /dev/ttyUSB1 on port 4000  (also after a reboot; ser2net 4.6.8)
-  Ethernet  rfc2217://10.42.11.205:4000  ← use this one
-  Wi-Fi     rfc2217://10.42.11.186:4000
-  Nobody connected. One client at a time: whoever connects last takes the port.
+● Shared on the network over Ethernet  (also after a reboot; ser2net 4.6.8)
+  /dev/ttyUSB1  rfc2217://10.42.11.205:4000  connected: 10.42.11.50
+  /dev/ttyACM0  rfc2217://10.42.11.205:4001  nobody connected
+  Also on Wi-Fi as 10.42.11.186, same ports
+  One client per port: whoever connects last takes it.
 ```
 
-DEVICE defaults to the one already shared, else `/dev/ttyUSB0` (`ttyUSB1` means `/dev/ttyUSB1`); PORT to the one already shared, else 4000.
+`ttyUSB1` means `/dev/ttyUSB1`; an alias or a stable path works too. PORT defaults to the one DEVICE is already shared on, else the first free from 4000. `ports unshare` takes a device or a port: `ports unshare ttyACM0` and `ports unshare 4001` are the same.
 
 - **ser2net is built from source, not taken from apt.** `--setup` (or `./install.sh --ser2net` alone) builds the newest tags of [ser2net](https://github.com/cminyard/ser2net) and [gensio](https://github.com/cminyard/gensio), the library that speaks RFC 2217 for it, into `/usr/local`, and installs [`etc/systemd/system/ser2net.service`](etc/systemd/system/ser2net.service) disabled; `share` enables it. Ubuntu's ser2net 4.6.0 never answers an RFC 2217 PURGE-DATA, which clients such as pyserial wait for before they open the port, so it is removed (its `/etc/ser2net.yaml` stays). Re-running picks up newer tags; build logs go to `~/.cache/dotfiles/`.
-- **The config is generated, never edited.** `share` writes `/etc/ser2net.yaml` with what matters fixed: `telnet(rfc2217)`, so the client can set the baud rate and send BREAKs, and `tcp(nodelay)`, without which ser2net holds back the second half of any reply longer than one FTDI USB packet (62 bytes) and reads time out. The first `share` keeps what was there before as `/etc/ser2net.yaml.orig`.
+- **The config is generated, never edited.** `share` and `unshare` rewrite `/etc/ser2net.yaml`, one connection per shared adapter, with what matters fixed: `telnet(rfc2217)`, so the client can set the baud rate and send BREAKs, and `tcp(nodelay)`, without which ser2net holds back the second half of any reply longer than one FTDI USB packet (62 bytes) and reads time out. The first `share` keeps what was there before as `/etc/ser2net.yaml.orig`.
+- **Adding or removing one share leaves the others connected.** A change reloads ser2net (SIGHUP) instead of restarting it. A share being removed is disabled first, which kicks its client off at once; deleted outright, ser2net would keep it until the client disconnected.
 - **Ethernet, not Wi-Fi.** Over Wi-Fi a remote bench sees timeouts; over a cable it needs no extra latency flags. The address list puts Ethernet first.
-- **No password.** Anyone on the network can open the port while it is shared, which is why `unshare` disables it at boot as well.
+- **No password.** Anyone on the network can open the port while it is shared, which is why the last `unshare` disables it at boot as well.
 - **This machine can still use the adapter** while nobody is connected; ser2net opens it only for a client. Or connect through the share like everyone else: `rfc2217://localhost:4000`.
 - **A stable path survives replugging.** `ports share /dev/serial/by-id/…` keeps sharing the same adapter whichever `ttyUSB` number it gets next time.
 

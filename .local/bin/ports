@@ -1,37 +1,40 @@
 #!/usr/bin/env bash
 # ports — list the USB serial adapters plugged in, follow them being plugged
-# in and out, or share one on the network.
+# in and out, or share them on the network.
 #
 # Listing comes from udev and /sys, so it needs no root and nothing beyond
 # udevadm. Only USB serial ports are listed: ttyS* and other built-in ttys
 # are not adapters.
 #
 # Sharing runs the ser2net that install.sh --ser2net builds from source, as a
-# systemd service serving one adapter as an RFC 2217 port, which another
-# machine opens as rfc2217://<this host>:<port>. Its config is generated,
-# never edited by hand: `share`
-# writes /etc/ser2net.yaml for one adapter and one TCP port, with what must not
+# systemd service serving each shared adapter as an RFC 2217 port on its own
+# TCP port, which another machine opens as rfc2217://<this host>:<port>. Its
+# config is generated, never edited by hand: `share` and `unshare` rewrite
+# /etc/ser2net.yaml with one connection per shared adapter, with what must not
 # be left out fixed here: telnet(rfc2217), so the client can set the baud rate
 # and send BREAKs, and tcp(nodelay), without which ser2net holds back the
 # second half of any reply longer than one FTDI USB packet (62 bytes) until
-# the client ACKs the first, and reads time out. Sharing survives a reboot:
-# share enables the service, unshare disables it.
+# the client ACKs the first, and reads time out. A change reloads ser2net
+# rather than restarting it, so clients of the other shares stay connected.
+# Sharing survives a reboot: the first share enables the service, the last
+# unshare disables it.
 
 SHARE_CONFIG=/etc/ser2net.yaml
 SHARE_MARK='# Written by ports share'
 SHARE_UNIT=/etc/systemd/system/ser2net.service
-SHARE_DEFAULT_DEVICE=/dev/ttyUSB0
-SHARE_DEFAULT_PORT=4000
+SHARE_FIRST_PORT=4000
 
 usage() {
   cat <<'EOF'
-Usage: ports                        list USB serial ports, and the one shared on the network
-       ports -w                     list them, then print a line per plug and unplug (Ctrl-C stops)
-       ports share [DEVICE] [PORT]  share DEVICE on the network on TCP PORT, now and at boot
-       ports unshare                stop sharing, now and at boot
+Usage: ports                         list USB serial ports, and those shared on the network
+       ports -w                      list them, then print a line per plug and unplug (Ctrl-C stops)
+       ports share DEVICE [PORT]     share DEVICE on TCP PORT too, now and at boot, or move it to PORT
+       ports unshare DEVICE|PORT     stop sharing that one; the others stay shared
+       ports unshare [--all]         stop sharing all of them (bare: only when one is shared)
 
-DEVICE defaults to the one already shared, else /dev/ttyUSB0; ttyUSB1 means
-/dev/ttyUSB1. PORT defaults to the one already shared, else 4000.
+ttyUSB1 means /dev/ttyUSB1; an alias or a /dev/serial/by-id path works too.
+PORT defaults to the one DEVICE is already shared on, else the first free
+from 4000.
 EOF
 }
 
@@ -153,26 +156,30 @@ describe() {
 # Prints a table of every USB serial port, or a dim note when there are none,
 # then where the shared one is reached from, while one is shared.
 list() {
-  local dev rows=() share_dev='' share_port='' share_real=''
+  local dev port rows=() shares=()
+  local -A shared_on   # resolved device → TCP port
   while IFS= read -r dev; do
     load_props "$dev"
     rows+=("$(describe)")
   done < <(usb_ttys)
   if systemctl is-active --quiet ser2net 2>/dev/null; then
-    read -r share_dev share_port < <(shared)
-    [[ -n $share_dev ]] && share_real=$(readlink -f "$share_dev")
+    mapfile -t shares < <(shared)
+    for dev in "${shares[@]}"; do
+      read -r port dev _ <<<"$dev"
+      shared_on[$(readlink -f "$dev")]=$port
+    done
   fi
 
   if (( ${#rows[@]} == 0 )); then
     echo "${DIM}No USB serial ports${RESET}"
-    [[ -n $share_dev ]] && { echo; share_summary "$share_dev" "$share_port"; }
+    (( ${#shares[@]} )) && { echo; share_summary "${shares[@]}"; }
     return
   fi
 
   # Widths of DEVICE PRODUCT SERIAL DRIVER LATENCY PORT, then ALIAS (field 7),
   # which is shown only when some port has one, and SHARED, shown only while
-  # one is shared — matched by the device it resolves to, so a by-id path in
-  # the config still marks its ttyUSB.
+  # something is shared — matched by the device it resolves to, so a by-id
+  # path in the config still marks its ttyUSB.
   local -a w=(6 7 6 6 7 4 0 5)
   local row i f alias_head='' alias_cell share_head='' share_cell
   for row in "${rows[@]}"; do
@@ -181,7 +188,7 @@ list() {
     [[ -n ${f[7]} ]] && alias_head=1
   done
   [[ -n $alias_head ]] && alias_head="$(pad ALIAS "${w[7]}")  "
-  [[ -n $share_dev ]] && share_head="$(pad SHARED 6)  "
+  (( ${#shares[@]} )) && share_head="$(pad SHARED 6)  "
 
   # Colours go outside each padded field, so escapes don't count as width.
   echo "${DIM}${BOLD}$(pad DEVICE "${w[0]}")  ${alias_head}$(pad PRODUCT "${w[1]}")  $(pad SERIAL "${w[2]}")  $(pad DRIVER "${w[3]}")  $(pad LATENCY "${w[4]}")  $(pad PORT "${w[5]}")  ${share_head}STABLE PATH${RESET}"
@@ -190,15 +197,16 @@ list() {
     alias_cell='' share_cell=''
     [[ -n $alias_head ]] && alias_cell="${BLUE}$(pad "${f[7]:-—}" "${w[7]}")${RESET}  "
     if [[ -n $share_head ]]; then
-      if [[ $(readlink -f "${f[0]}") == "$share_real" ]]; then
-        share_cell="${GREEN}${BOLD}$(pad ":$share_port" 6)${RESET}  "
+      port=${shared_on[$(readlink -f "${f[0]}")]}
+      if [[ -n $port ]]; then
+        share_cell="${GREEN}${BOLD}$(pad ":$port" 6)${RESET}  "
       else
         share_cell="${DIM}$(pad — 6)${RESET}  "
       fi
     fi
     echo "${BLUE}${BOLD}$(pad "${f[0]}" "${w[0]}")${RESET}  ${alias_cell}${TEXT}$(pad "${f[1]}" "${w[1]}")${RESET}  ${YELLOW}$(pad "${f[2]}" "${w[2]}")${RESET}  ${MAUVE}$(pad "${f[3]}" "${w[3]}")${RESET}  $(latency_colour "${f[4]}")$(pad "${f[4]}" "${w[4]}")${RESET}  ${TEAL}$(pad "${f[5]}" "${w[5]}")${RESET}  ${share_cell}${DIM}${f[6]}${RESET}"
   done
-  [[ -n $share_dev ]] && { echo; share_summary "$share_dev" "$share_port"; }
+  (( ${#shares[@]} )) && { echo; share_summary "${shares[@]}"; }
 }
 
 # ── Sharing ───────────────────────────────────────────────────────────────────
@@ -213,17 +221,24 @@ share_need_ser2net() {
     || share_die "ser2net is not set up — run ./install.sh --ser2net in the dotfiles"
 }
 
-# The device and TCP port the current config shares as RFC 2217, as
-# "DEVICE PORT", or nothing when it shares none.
+# What the current config shares as RFC 2217, one "PORT DEVICE NAME" line per
+# enabled connection, by port; NAME is ser2net's name for the connection.
 shared() {
   [[ -r $SHARE_CONFIG ]] || return
   awk '
+    function flush() { if (port != "" && dev != "" && !off) print port, dev, name; port = dev = ""; off = 0 }
+    /^connection:/ { flush(); name = $2; sub(/^&/, "", name) }
+    /^[[:space:]]+enable:[[:space:]]*off/ { off = 1 }
     /accepter:.*telnet\(rfc2217\)/ { n = split($0, a, ","); port = a[n]; gsub(/[^0-9]/, "", port) }
-    /connector:.*serialdev/ && port != "" {
-      split($0, b, ","); dev = b[2]; gsub(/[[:space:]]/, "", dev)
-      print dev, port; exit
-    }' "$SHARE_CONFIG"
+    /connector:.*serialdev/ { split($0, b, ","); dev = b[2]; gsub(/[[:space:]]/, "", dev) }
+    END { flush() }' "$SHARE_CONFIG" | sort -n
 }
+
+# Whether $1 and $2 name the same device: the same path, or links to one.
+same_dev() { [[ $1 == "$2" || $(readlink -f "$1") == "$(readlink -f "$2")" ]]; }
+
+# Whether anything listens on TCP port $1.
+listening() { ss -ltnH "( sport = :$1 )" 2>/dev/null | grep -q .; }
 
 # One "LABEL ADDRESS" line per network this host is on, Ethernet first: a
 # cable has far less delay and jitter than Wi-Fi, and over Wi-Fi a remote
@@ -247,39 +262,48 @@ clients() {
     | sort -u | paste -sd, - | sed 's/,/, /g'
 }
 
-# Where the share of $1 on TCP port $2 is reached from, and who has it.
+# Where each share ("PORT DEVICE" per argument) is reached from, and who has
+# it. The addresses are this host's first network, Ethernet when there is
+# one; the others are named below.
 share_summary() {
-  local dev=$1 port=$2 boot first=1 label addr peers
+  local boot first='' first_label='' label addr s port dev note peers dw=0 uw=0
+  local -a others=()
   boot=$(systemctl is-enabled ser2net 2>/dev/null)
-  echo "${GREEN}●${RESET} Shared on the network: ${BLUE}${BOLD}$dev${RESET} on port ${BOLD}$port${RESET}  ${DIM}($([[ $boot == enabled ]] && echo "also after a reboot" || echo "until a reboot"); ser2net $(/usr/local/sbin/ser2net -v 2>/dev/null | grep -oP '\d+\.\d+\.\d+'))${RESET}"
-  [[ -c $dev ]] || echo "  ${YELLOW}!${RESET} $dev is not plugged in"
-  ss -ltnH "( sport = :$port )" | grep -q . \
-    || echo "  ${RED}✗${RESET} nothing listens on port $port — see: journalctl -u ser2net -n 20"
   while read -r label addr; do
-    if (( first )); then
-      echo "  ${TEXT}$(pad "$label" 8)${RESET}  ${TEAL}rfc2217://$addr:$port${RESET}  ${DIM}← use this one${RESET}"
-      first=0
-    else
-      echo "  ${DIM}$(pad "$label" 8)  rfc2217://$addr:$port${RESET}"
-    fi
+    if [[ -z $first ]]; then first=$addr first_label=$label; else others+=("$label $addr"); fi
   done < <(addresses)
-  peers=$(clients "$port")
-  if [[ -n $peers ]]; then
-    echo "  ${MAUVE}Connected:${RESET} $peers"
-  else
-    echo "  ${DIM}Nobody connected. One client at a time: whoever connects last takes the port.${RESET}"
-  fi
+  [[ -n $first ]] || first=localhost first_label="this machine only"
+  for s; do
+    read -r port dev _ <<<"$s"
+    (( ${#dev} > dw )) && dw=${#dev}
+    s="rfc2217://$first:$port"
+    (( ${#s} > uw )) && uw=${#s}
+  done
+
+  echo "${GREEN}●${RESET} Shared on the network over ${BOLD}$first_label${RESET}  ${DIM}($([[ $boot == enabled ]] && echo "also after a reboot" || echo "until a reboot"); ser2net $(/usr/local/sbin/ser2net -v 2>/dev/null | grep -oP '\d+\.\d+\.\d+'))${RESET}"
+  for s; do
+    read -r port dev _ <<<"$s"
+    if ! listening "$port"; then
+      note="${RED}✗ nothing listens — see: journalctl -u ser2net -n 20${RESET}"
+    elif [[ ! -c $dev ]]; then
+      note="${YELLOW}! not plugged in${RESET}"
+    elif peers=$(clients "$port"); [[ -n $peers ]]; then
+      note="${MAUVE}connected:${RESET} $peers"
+    else
+      note="${DIM}nobody connected${RESET}"
+    fi
+    echo "  ${BLUE}${BOLD}$(pad "$dev" "$dw")${RESET}  ${TEAL}$(pad "rfc2217://$first:$port" "$uw")${RESET}  $note"
+  done
+  for s in "${others[@]}"; do
+    echo "  ${DIM}Also on ${s%% *} as ${s#* }, same ports${RESET}"
+  done
+  echo "  ${DIM}One client per port: whoever connects last takes it.${RESET}"
 }
 
-share() {
-  local dev=$1 port=$2 cur_dev cur_port
-  share_need_ser2net
-  read -r cur_dev cur_port < <(shared)
-  dev=${dev:-${cur_dev:-$SHARE_DEFAULT_DEVICE}}
-  port=${port:-${cur_port:-$SHARE_DEFAULT_PORT}}
-  [[ $dev == /* ]] || dev=/dev/$dev
-  [[ -c $dev ]] || share_die "$dev is not a serial device — \`ports\` lists what is plugged in"
-  [[ $port =~ ^[0-9]+$ ]] && (( port > 0 && port < 65536 )) || share_die "$port is not a TCP port"
+# Writes the config: one connection per "PORT DEVICE [NAME [off]]" argument,
+# named port<PORT> unless NAME is given, and disabled when "off" follows.
+write_config() {
+  local s port dev name state
 
   # Whatever was there first (Debian's examples, or a hand-written config) is
   # kept once, beside it, before the first rewrite.
@@ -288,31 +312,141 @@ share() {
     echo "${DIM}Kept the previous config as $SHARE_CONFIG.orig${RESET}"
   fi
 
-  sudo tee "$SHARE_CONFIG" >/dev/null <<EOF || share_die "could not write $SHARE_CONFIG"
+  {
+    cat <<EOF
 %YAML 1.1
 ---
 $SHARE_MARK: it rewrites this file, \`ports unshare\` stops sharing.
 # telnet(rfc2217): the client sets the baud rate and sends BREAKs.
 # tcp(nodelay): without it, replies longer than one FTDI USB packet are held
 # back until the client ACKs, and reads time out.
-connection: &shared
+EOF
+    for s; do
+      read -r port dev name state <<<"$s"
+      cat <<EOF
+
+connection: &${name:-port$port}
     accepter: telnet(rfc2217),tcp(nodelay),$port
-    enable: on
+    enable: ${state:-on}
     options:
       kickolduser: true
     connector: serialdev,$dev,3000000n81,local
 EOF
+    done
+  } | sudo tee "$SHARE_CONFIG" >/dev/null || share_die "could not write $SHARE_CONFIG"
+}
 
-  sudo systemctl enable --quiet ser2net && sudo systemctl restart ser2net \
-    || share_die "ser2net did not start — see: journalctl -u ser2net -n 20"
+# Makes ser2net reread the config. Unlike a restart, this leaves the
+# connections that did not change, and their clients, alone.
+reload_ser2net() {
+  sudo systemctl kill --kill-whom=main --signal=HUP ser2net || share_die "could not reload ser2net"
   sleep 0.5
+}
+
+# Shares exactly the "PORT DEVICE" arguments: none stops ser2net, now and at
+# boot. While it runs, a connection that goes away is first disabled, which
+# kicks its client off and frees the adapter and the TCP port; deleted
+# outright, ser2net would keep it until the client disconnects.
+apply_shares() {
+  local -a keep=() off=()
+  local port dev name s
+
+  if (( $# == 0 )); then
+    write_config
+    sudo systemctl disable --quiet --now ser2net || share_die "could not stop ser2net"
+    return
+  fi
+
+  if systemctl is-active --quiet ser2net; then
+    while read -r port dev name; do
+      for s; do
+        [[ $s == "$port $dev" && $name == "port$port" ]] && { keep+=("$s"); continue 2; }
+      done
+      off+=("$port $dev $name off")
+    done < <(shared)
+    if (( ${#off[@]} )); then
+      write_config "${keep[@]}" "${off[@]}"
+      reload_ser2net
+    fi
+    write_config "$@"
+    reload_ser2net
+  else
+    write_config "$@"
+    sudo systemctl enable --quiet ser2net && sudo systemctl restart ser2net \
+      || share_die "ser2net did not start — see: journalctl -u ser2net -n 20"
+    sleep 0.5
+  fi
+}
+
+# Shares $1 on TCP port $2 as well as whatever is shared already, or moves it
+# there when it is shared on another.
+share() {
+  local dev=$1 port=$2 p d cur='' s
+  local -a want=()
+  share_need_ser2net
+  [[ -n $dev ]] || share_die "share which? e.g. \`ports share ttyUSB1\` — \`ports\` lists what is plugged in"
+  [[ $dev == /* ]] || dev=/dev/$dev
+  [[ -c $dev ]] || share_die "$dev is not a serial device — \`ports\` lists what is plugged in"
+  [[ -z $port ]] || { [[ $port =~ ^[0-9]+$ ]] && (( port > 0 && port < 65536 )); } || share_die "$port is not a TCP port"
+
+  while read -r p d _; do
+    if same_dev "$d" "$dev"; then cur=$p; continue; fi
+    [[ $p == "$port" ]] && share_die "port $port already shares $d — pick another, or \`ports unshare $port\` first"
+    want+=("$p $d")
+  done < <(shared)
+
+  if [[ -z $port ]]; then
+    port=${cur:-$SHARE_FIRST_PORT}
+    if [[ -z $cur ]]; then
+      while listening "$port" || printf '%s\n' "${want[@]}" | grep -q "^$port "; do (( port++ )); done
+    fi
+  elif [[ $port != "$cur" ]] && listening "$port"; then
+    share_die "something else already listens on port $port — pick another"
+  fi
+
+  want+=("$port $dev")
+  mapfile -t want < <(printf '%s\n' "${want[@]}" | sort -n)
+  apply_shares "${want[@]}"
   list
 }
 
+# Stops sharing $1, a device or a TCP port, or all of them for --all.
+# Without $1, stops the only share, and asks which when there are several.
 unshare() {
+  local target=$1 p d s gone=''
+  local -a all=() want=()
   share_need_ser2net
-  sudo systemctl disable --quiet --now ser2net || share_die "could not stop ser2net"
-  echo "${DIM}○${RESET} Not shared — the adapters are this machine's alone again"
+  mapfile -t all < <(shared)
+
+  if [[ -z $target ]]; then
+    if (( ${#all[@]} > 1 )); then
+      echo "${RED}✗${RESET} ${#all[@]} are shared — say which, or all of them:" >&2
+      for s in "${all[@]}"; do
+        read -r p d _ <<<"$s"
+        echo "    ports unshare ${d#/dev/}    ${DIM}(port $p)${RESET}" >&2
+      done
+      echo "    ports unshare --all" >&2
+      exit 1
+    fi
+    target=--all
+  fi
+
+  if [[ $target == --all || $target == all ]]; then
+    apply_shares
+    echo "${DIM}○${RESET} Not shared — the adapters are this machine's alone again"
+    return
+  fi
+
+  [[ $target =~ ^[0-9]+$ || $target == /* ]] || target=/dev/$target
+  for s in "${all[@]}"; do
+    read -r p d _ <<<"$s"
+    if [[ $p == "$target" ]] || same_dev "$d" "$target"; then gone="$d on port $p"; else want+=("$p $d"); fi
+  done
+  [[ -n $gone ]] || share_die "${target#/dev/} is not shared — \`ports\` shows what is"
+
+  apply_shares "${want[@]}"
+  echo "${DIM}○${RESET} Stopped sharing $gone"
+  if (( ${#want[@]} )); then echo; list; fi
 }
 
 # Column widths for -w lines, indexed like describe's fields (0 device,
@@ -391,7 +525,7 @@ case $1 in
   "")         list ;;
   -w|--watch) watch_ports ;;
   share)      share "$2" "$3" ;;
-  unshare)    unshare ;;
+  unshare)    unshare "$2" ;;
   -h|--help)  usage ;;
   *)          usage >&2; exit 2 ;;
 esac
