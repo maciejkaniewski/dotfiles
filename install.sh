@@ -2177,6 +2177,118 @@ install_serial_access() {
   fi
 }
 
+# ── ser2net, for `ports share` ───────────────────────────────────────────────────
+# ser2net and gensio, the library that speaks RFC 2217 for it, built from their
+# newest tags into /usr/local instead of taken from apt. Ubuntu 24.04 ships
+# ser2net 4.6.0 with gensio 2.8.2, which never answer an RFC 2217 PURGE-DATA:
+# clients such as pyserial wait for that answer and cannot open the port.
+# The unit is copied like the udev rule and left disabled.
+SER2NET_UNIT=ser2net.service
+SER2NET_BIN=/usr/local/sbin/ser2net
+SER2NET_BUILD_DEPS=(autoconf automake libtool pkg-config libyaml-dev)
+# What gensio is built without: none of it is on ser2net's serial-to-TCP path,
+# and each would add a build dependency.
+GENSIO_CONFIGURE=(--without-python --without-swig --without-go --without-tcl --without-glib
+  --without-openipmi --without-sctp --without-pam --without-mdns --without-alsa
+  --without-portaudio --without-winsound --without-udev --without-cm108gpio)
+
+# Newest vX.Y.Z tag of GitHub repo $1. Neither project publishes GitHub
+# releases, so github_latest finds nothing; tags are what they ship.
+github_tag_latest() {
+  git ls-remote --tags --refs "https://github.com/$1.git" 'v*' 2>/dev/null \
+    | grep -oP 'refs/tags/v\K\d+\.\d+\.\d+$' | sort -V | tail -1
+}
+
+gensio_installed_version() {
+  PKG_CONFIG_PATH=/usr/local/lib/pkgconfig pkg-config --modversion libgensio 2>/dev/null
+}
+
+ser2net_installed_version() {
+  [[ -x "$SER2NET_BIN" ]] && "$SER2NET_BIN" -v 2>/dev/null | grep -oP '\d+\.\d+\.\d+'
+}
+
+# Builds tag v$2 of cminyard/$1 into /usr/local, configured with the rest of the
+# arguments. The log is kept outside SCRIPT_TMPDIR, which is gone by the time
+# anyone reads a failure.
+build_from_tag() {
+  local repo="$1" version="$2"; shift 2
+  local src="$SCRIPT_TMPDIR/$repo" log="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/$repo-build.log"
+  mkdir -p "${log%/*}"
+  {
+    git clone -q --depth 1 --branch "v$version" "https://github.com/cminyard/$repo.git" "$src" \
+      && cd "$src" && ./reconf \
+      && ./configure -q --prefix=/usr/local "$@" \
+      && make -s -j"$(nproc)" \
+      && sudo make -s install \
+      && sudo ldconfig
+  } >"$log" 2>&1 || { tail -5 "$log" >&2; echo "full log: $log" >&2; return 1; }
+}
+
+install_ser2net() {
+  local missing=() dep was_active=false gensio ser2net rebuilt=false
+  for dep in "${SER2NET_BUILD_DEPS[@]}"; do
+    dpkg -s "$dep" &>/dev/null || missing+=("$dep")
+  done
+  if (( ${#missing[@]} )); then
+    run_spin "installing ${missing[*]}..." apt_get install -y "${missing[@]}" \
+      && log_ok "build dependencies: ${missing[*]}" \
+      || { log_error "ser2net" "apt install ${missing[*]} failed"; return; }
+  fi
+
+  systemctl is-active --quiet ser2net && was_active=true
+  # Two ser2nets would fight over the unit name. apt remove, not purge, keeps
+  # /etc/ser2net.yaml, which is the config `ports share` writes.
+  if dpkg -s ser2net &>/dev/null; then
+    local apt_version; apt_version=$(dpkg-query -W -f='${Version}' ser2net 2>/dev/null)
+    run_spin "removing apt's ser2net..." apt_get remove -y ser2net \
+      && log_ok "removed apt's ser2net $apt_version (/etc/ser2net.yaml kept)" \
+      || { log_error "ser2net" "apt remove ser2net failed"; return; }
+  fi
+
+  run_spin_capture "checking latest gensio..." gensio github_tag_latest cminyard/gensio
+  run_spin_capture "checking latest ser2net..." ser2net github_tag_latest cminyard/ser2net
+  if [[ -z "$gensio" || -z "$ser2net" ]]; then
+    [[ -n "$(ser2net_installed_version)" ]] \
+      && { log_skip "ser2net $(ser2net_installed_version) (could not check latest)"; return; }
+    log_error "ser2net" "could not resolve latest version — network down? re-run once it is back"; return
+  fi
+
+  if needs_install "gensio" "$(gensio_installed_version)" "$gensio" ""; then
+    run_spin "building gensio $gensio..." build_from_tag gensio "$gensio" "${GENSIO_CONFIGURE[@]}" \
+      && { log_ok "gensio $gensio installed"; rebuilt=true; } \
+      || { log_error "gensio" "build failed"; return; }
+  fi
+  # A new gensio is a new ABI: ser2net is rebuilt against it even when its own
+  # version has not moved.
+  if [[ "$rebuilt" == true ]] || needs_install "ser2net" "$(ser2net_installed_version)" "$ser2net" ""; then
+    run_spin "building ser2net $ser2net..." build_from_tag ser2net "$ser2net" --sysconfdir=/etc \
+      && log_ok "ser2net $ser2net installed in /usr/local/sbin" \
+      || { log_error "ser2net" "build failed"; return; }
+  fi
+
+  local src="$DOTFILES/etc/systemd/system/$SER2NET_UNIT" dst="/etc/systemd/system/$SER2NET_UNIT"
+  if cmp -s "$src" "$dst"; then
+    log_skip "$dst"
+  elif sudo install -m 644 -o root -g root "$src" "$dst" && sudo systemctl daemon-reload; then
+    log_ok "$dst (disabled — ports share enables it)"
+  else
+    log_error "$SER2NET_UNIT" "could not install into /etc/systemd/system"; return
+  fi
+  # Removing apt's package stopped a share that was running; put it back.
+  if [[ "$was_active" == true ]] && ! systemctl is-active --quiet ser2net; then
+    sudo systemctl enable --quiet ser2net && sudo systemctl restart ser2net \
+      && log_ok "ser2net restarted — still sharing, now on $(ser2net_installed_version)" \
+      || log_error "ser2net" "restart failed — see: journalctl -u ser2net -n 20"
+  fi
+}
+
+cmd_ser2net() {
+  banner
+  section "ser2net (for ports share)"
+  sudo -v || { log_error "sudo" "authentication failed — cannot continue"; return 1; }
+  install_ser2net
+}
+
 # Prompts "<label> [<default>]: " and stores the reply, or the default when the
 # reply is empty, in the variable named by $3.
 ask_default() {
@@ -2733,6 +2845,17 @@ verify_serial_access() {
   echo 'in dialout; FTDI latency rule installed'
 }
 
+# The source build, not apt's: the package's 4.6.0 is what this replaces, and
+# both at once would fight over the unit.
+verify_ser2net() {
+  local v; v=$(ser2net_installed_version)
+  [[ -n "$v" ]] || { echo "$SER2NET_BIN missing (run --ser2net)"; return 1; }
+  ! dpkg -s ser2net &>/dev/null || { echo "apt's ser2net is installed beside the source build (run --ser2net)"; return 1; }
+  cmp -s "$DOTFILES/etc/systemd/system/$SER2NET_UNIT" "/etc/systemd/system/$SER2NET_UNIT" \
+    || { echo "/etc/systemd/system/$SER2NET_UNIT missing or out of date (run --ser2net)"; return 1; }
+  echo "ser2net $v (gensio $(gensio_installed_version)) from source; unit installed"
+}
+
 # dpkg -C rather than `apt-get check` on purpose: it needs no sudo, and this
 # runs after the keepalive is dropped.
 verify_dpkg_state() {
@@ -2761,6 +2884,7 @@ verify_install() {
   vcheck "CLI tools"         verify_cli_tools
   vcheck "symlinks"          verify_symlinks
   vcheck "serial ports"      verify_serial_access
+  vcheck "ser2net"           verify_ser2net
   vcheck "shell lint"        verify_shell_lint
   vcheck "dpkg state"        verify_dpkg_state
 
@@ -2836,6 +2960,7 @@ cmd_setup() {
 
   section "Serial ports"
   install_serial_access
+  install_ser2net
 
   # Nothing past this point needs sudo — stop refreshing the credential so the
   # background loop can't contend with the interactive [y/N] prompts below for
@@ -3101,6 +3226,7 @@ usage() {
   echo -e "    ${GREEN}./install.sh --theme${RESET}       ${SUBTEXT}Pick or re-apply the color theme, nothing else${RESET}"
   echo -e "    ${GREEN}./install.sh --identity${RESET}    ${SUBTEXT}Set your git name and email, pick the personal or work profile, nothing else${RESET}"
   echo -e "    ${GREEN}./install.sh --llvm${RESET}        ${SUBTEXT}Show the LLVM pin, the active version and what's on disk${RESET}"
+  echo -e "    ${GREEN}./install.sh --ser2net${RESET}     ${SUBTEXT}Build the newest ser2net and gensio from source, for ports share, nothing else${RESET}"
   echo -e "    ${GREEN}./install.sh -h, --help${RESET}    ${SUBTEXT}Show this help message${RESET}"
   echo
   echo -e "  ${TEXT}${BOLD}Tool versions:${RESET}"
@@ -3164,7 +3290,8 @@ usage() {
   echo -e "    ${TEXT}${BOLD}Serial ports${RESET}"
   echo -e "      ${SUBTEXT}dialout group        ${TEXT}open USB-serial adapters without sudo or chmod${RESET}"
   echo -e "      ${SUBTEXT}FTDI latency rule    ${TEXT}udev sets every FTDI port's latency timer to 1 ms on plug-in${RESET}"
-  echo -e "      ${SUBTEXT}ports                ${TEXT}list USB serial ports, -w to watch plug/unplug${RESET}"
+  echo -e "      ${SUBTEXT}ports                ${TEXT}list USB serial ports, -w to watch plug/unplug, share/unshare one on the network${RESET}"
+  echo -e "      ${SUBTEXT}ser2net              ${TEXT}newest ser2net + gensio built from source into /usr/local, for ports share${RESET}"
   echo -e "    ${TEXT}${BOLD}Configuration${RESET}"
   echo -e "      ${SUBTEXT}Dotfile symlinks${RESET}"
   echo -e "      ${SUBTEXT}Theme                ${TEXT}pick Catppuccin (frappe/macchiato/mocha), Gruvbox Dark, or Dracula — kitty + bat + nvim + fzf + eza + tab bar + btop + zsh-syntax-highlighting + lazygit + delta + Zed + Powerlevel10k${RESET}"
@@ -3191,6 +3318,7 @@ case "${1}" in
   --theme)       cmd_theme ;;
   --identity)    cmd_identity ;;
   --llvm)        cmd_llvm "${2:-}" ;;
+  --ser2net)     cmd_ser2net ;;
   -h | --help)   usage ;;
   *)
     echo -e "\n  ${RED}Unknown option:${RESET} $1"

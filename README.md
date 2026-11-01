@@ -202,7 +202,8 @@ One upstream wrinkle worth knowing about: LLVM renamed its Linux release assets 
 |---|---|
 | `dialout` group | Adds you to it, so USB-serial adapters open without sudo or `chmod` |
 | `98-ftdi-latency.rules` | Copied into `/etc/udev/rules.d`; sets every FTDI port's latency timer to 1 ms on plug-in |
-| `ports` | Lists USB serial ports and watches them being plugged in and out (linked into `~/.local/bin`) |
+| `ports` | Lists USB serial ports, watches them being plugged in and out, and shares one on the network (linked into `~/.local/bin`) |
+| ser2net | Newest ser2net and gensio built from source into `/usr/local`, with a disabled systemd unit, for `ports share`; also `./install.sh --ser2net` alone |
 
 ---
 
@@ -1035,10 +1036,35 @@ Watching for plug and unplug — Ctrl-C to stop
 |---|---|
 | `ports` | Lists every USB serial port: product string, serial number, driver, latency timer, USB port and stable path. FT2232/FT4232 channels are named `(A)`, `(B)`, … A name a local udev rule gives a port (`SYMLINK+="FT2232_CH0"`) shows in an ALIAS column, which appears only when some port has one |
 | `ports -w` | Lists them, then prints a timestamped `+` or `−` line each time an adapter is plugged in or out, until `Ctrl-C` |
+| `ports share [DEVICE] [PORT]` | Shares DEVICE on the network on TCP PORT, now and at boot (below) |
+| `ports unshare` | Stops sharing, now and at boot |
 
 Colours follow the theme picked with `--theme`, in the same roles as the prompt; the latency shows green at 1 ms and orange at anything else. Piped output is plain text.
 
-The stable path (`/dev/serial/by-id/…`) is created by udev for every adapter. It names the adapter by its product and serial number, so it stays the same whichever USB socket it is in and whichever `ttyUSB` number it gets — usually no need for a per-device alias. Pass it to any tool that takes a port, e.g. `--LINK_UART_PORT`.
+The stable path (`/dev/serial/by-id/…`) is created by udev for every adapter. It names the adapter by its product and serial number, so it stays the same whichever USB socket it is in and whichever `ttyUSB` number it gets — usually no need for a per-device alias. Pass it to any tool that takes a port.
+
+**`ports share`** shares one adapter on the network, so another machine opens it as `rfc2217://<host>:<port>` with any RFC 2217 client (pyserial's `serial_for_url`, for one), as if it were plugged in there. While it is shared, `ports` marks it in a SHARED column, which appears only then, and lists the address to give for each network:
+
+```
+$ ports share ttyUSB1
+DEVICE        PRODUCT            SERIAL  DRIVER    LATENCY  PORT  SHARED  STABLE PATH
+/dev/ttyUSB0  Dual RS232-HS (A)  —       ftdi_sio  1 ms     3-1   —       /dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if00-port0
+/dev/ttyUSB1  Dual RS232-HS (B)  —       ftdi_sio  1 ms     3-1   :4000   /dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if01-port0
+
+● Shared on the network: /dev/ttyUSB1 on port 4000  (also after a reboot; ser2net 4.6.8)
+  Ethernet  rfc2217://10.42.11.205:4000  ← use this one
+  Wi-Fi     rfc2217://10.42.11.186:4000
+  Nobody connected. One client at a time: whoever connects last takes the port.
+```
+
+DEVICE defaults to the one already shared, else `/dev/ttyUSB0` (`ttyUSB1` means `/dev/ttyUSB1`); PORT to the one already shared, else 4000.
+
+- **ser2net is built from source, not taken from apt.** `--setup` (or `./install.sh --ser2net` alone) builds the newest tags of [ser2net](https://github.com/cminyard/ser2net) and [gensio](https://github.com/cminyard/gensio), the library that speaks RFC 2217 for it, into `/usr/local`, and installs [`etc/systemd/system/ser2net.service`](etc/systemd/system/ser2net.service) disabled; `share` enables it. Ubuntu's ser2net 4.6.0 never answers an RFC 2217 PURGE-DATA, which clients such as pyserial wait for before they open the port, so it is removed (its `/etc/ser2net.yaml` stays). Re-running picks up newer tags; build logs go to `~/.cache/dotfiles/`.
+- **The config is generated, never edited.** `share` writes `/etc/ser2net.yaml` with what matters fixed: `telnet(rfc2217)`, so the client can set the baud rate and send BREAKs, and `tcp(nodelay)`, without which ser2net holds back the second half of any reply longer than one FTDI USB packet (62 bytes) and reads time out. The first `share` keeps what was there before as `/etc/ser2net.yaml.orig`.
+- **Ethernet, not Wi-Fi.** Over Wi-Fi a remote bench sees timeouts; over a cable it needs no extra latency flags. The address list puts Ethernet first.
+- **No password.** Anyone on the network can open the port while it is shared, which is why `unshare` disables it at boot as well.
+- **This machine can still use the adapter** while nobody is connected; ser2net opens it only for a client. Or connect through the share like everyone else: `rfc2217://localhost:4000`.
+- **A stable path survives replugging.** `ports share /dev/serial/by-id/…` keeps sharing the same adapter whichever `ttyUSB` number it gets next time.
 
 ---
 
@@ -1121,7 +1147,7 @@ dotfiles/
 ├── .local/
 │   └── bin/
 │       ├── git-credential-bw          # git credential helper — HTTPS logins from the Bitwarden vault
-│       └── ports                      # list / watch USB serial ports
+│       └── ports                      # list / watch USB serial ports, share one on the network
 ├── .p10k.zsh
 ├── .ssh/
 │   ├── config                         # shared client settings, includes ~/.ssh/config.local first
@@ -1132,6 +1158,9 @@ dotfiles/
 ├── .zshrc.local.work
 ├── .gitattributes                     # runs git-filters/zed-theme on Zed's settings.json
 ├── etc/
+│   ├── systemd/
+│   │   └── system/
+│   │       └── ser2net.service        # copied to /etc by --setup / --ser2net: the source-built ser2net, for ports share
 │   └── udev/
 │       └── rules.d/
 │           └── 98-ftdi-latency.rules  # copied to /etc by --setup: 1 ms latency on every FTDI port

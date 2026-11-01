@@ -1,0 +1,17 @@
+# ser2net built from source by install.sh --ser2net, for `ports share`.
+# Debian's own unit, pointed at /usr/local. Installed, not enabled: `ports share`
+# enables it and `ports unshare` disables it, so sharing survives a reboot only
+# while it is wanted.
+[Unit]
+Description=Serial port to network proxy
+Documentation=man:ser2net(8)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/sbin/ser2net -n -c /etc/ser2net.yaml -P /run/ser2net.pid
+Type=exec
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

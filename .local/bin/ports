@@ -1,15 +1,37 @@
 #!/usr/bin/env bash
-# ports — list the USB serial adapters plugged in, or follow them being
-# plugged in and out.
+# ports — list the USB serial adapters plugged in, follow them being plugged
+# in and out, or share one on the network.
 #
-# Everything comes from udev and /sys, so it needs no root and nothing beyond
+# Listing comes from udev and /sys, so it needs no root and nothing beyond
 # udevadm. Only USB serial ports are listed: ttyS* and other built-in ttys
 # are not adapters.
+#
+# Sharing runs the ser2net that install.sh --ser2net builds from source, as a
+# systemd service serving one adapter as an RFC 2217 port, which another
+# machine opens as rfc2217://<this host>:<port>. Its config is generated,
+# never edited by hand: `share`
+# writes /etc/ser2net.yaml for one adapter and one TCP port, with what must not
+# be left out fixed here: telnet(rfc2217), so the client can set the baud rate
+# and send BREAKs, and tcp(nodelay), without which ser2net holds back the
+# second half of any reply longer than one FTDI USB packet (62 bytes) until
+# the client ACKs the first, and reads time out. Sharing survives a reboot:
+# share enables the service, unshare disables it.
+
+SHARE_CONFIG=/etc/ser2net.yaml
+SHARE_MARK='# Written by ports share'
+SHARE_UNIT=/etc/systemd/system/ser2net.service
+SHARE_DEFAULT_DEVICE=/dev/ttyUSB0
+SHARE_DEFAULT_PORT=4000
 
 usage() {
   cat <<'EOF'
-Usage: ports     list USB serial ports
-       ports -w  list them, then print a line per plug and unplug (Ctrl-C stops)
+Usage: ports                        list USB serial ports, and the one shared on the network
+       ports -w                     list them, then print a line per plug and unplug (Ctrl-C stops)
+       ports share [DEVICE] [PORT]  share DEVICE on the network on TCP PORT, now and at boot
+       ports unshare                stop sharing, now and at boot
+
+DEVICE defaults to the one already shared, else /dev/ttyUSB0; ttyUSB1 means
+/dev/ttyUSB1. PORT defaults to the one already shared, else 4000.
 EOF
 }
 
@@ -128,37 +150,169 @@ describe() {
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${P[DEVNAME]}" "$product" "$serial" "$driver" "$latency" "$port" "$path" "${link//,/, }"
 }
 
-# Prints a table of every USB serial port, or a dim note when there are none.
+# Prints a table of every USB serial port, or a dim note when there are none,
+# then where the shared one is reached from, while one is shared.
 list() {
-  local dev rows=()
+  local dev rows=() share_dev='' share_port='' share_real=''
   while IFS= read -r dev; do
     load_props "$dev"
     rows+=("$(describe)")
   done < <(usb_ttys)
+  if systemctl is-active --quiet ser2net 2>/dev/null; then
+    read -r share_dev share_port < <(shared)
+    [[ -n $share_dev ]] && share_real=$(readlink -f "$share_dev")
+  fi
 
   if (( ${#rows[@]} == 0 )); then
-    echo "${DIM}No USB serial ports${RESET}"; return
+    echo "${DIM}No USB serial ports${RESET}"
+    [[ -n $share_dev ]] && { echo; share_summary "$share_dev" "$share_port"; }
+    return
   fi
 
   # Widths of DEVICE PRODUCT SERIAL DRIVER LATENCY PORT, then ALIAS (field 7),
-  # which is shown only when some port has one.
+  # which is shown only when some port has one, and SHARED, shown only while
+  # one is shared — matched by the device it resolves to, so a by-id path in
+  # the config still marks its ttyUSB.
   local -a w=(6 7 6 6 7 4 0 5)
-  local row i f alias_head='' alias_cell
+  local row i f alias_head='' alias_cell share_head='' share_cell
   for row in "${rows[@]}"; do
     IFS=$'\t' read -ra f <<<"$row"
     for i in 0 1 2 3 4 5 7; do (( ${#f[i]} > w[i] )) && w[i]=${#f[i]}; done
     [[ -n ${f[7]} ]] && alias_head=1
   done
   [[ -n $alias_head ]] && alias_head="$(pad ALIAS "${w[7]}")  "
+  [[ -n $share_dev ]] && share_head="$(pad SHARED 6)  "
 
   # Colours go outside each padded field, so escapes don't count as width.
-  echo "${DIM}${BOLD}$(pad DEVICE "${w[0]}")  ${alias_head}$(pad PRODUCT "${w[1]}")  $(pad SERIAL "${w[2]}")  $(pad DRIVER "${w[3]}")  $(pad LATENCY "${w[4]}")  $(pad PORT "${w[5]}")  STABLE PATH${RESET}"
+  echo "${DIM}${BOLD}$(pad DEVICE "${w[0]}")  ${alias_head}$(pad PRODUCT "${w[1]}")  $(pad SERIAL "${w[2]}")  $(pad DRIVER "${w[3]}")  $(pad LATENCY "${w[4]}")  $(pad PORT "${w[5]}")  ${share_head}STABLE PATH${RESET}"
   for row in "${rows[@]}"; do
     IFS=$'\t' read -ra f <<<"$row"
-    alias_cell=''
+    alias_cell='' share_cell=''
     [[ -n $alias_head ]] && alias_cell="${BLUE}$(pad "${f[7]:-—}" "${w[7]}")${RESET}  "
-    echo "${BLUE}${BOLD}$(pad "${f[0]}" "${w[0]}")${RESET}  ${alias_cell}${TEXT}$(pad "${f[1]}" "${w[1]}")${RESET}  ${YELLOW}$(pad "${f[2]}" "${w[2]}")${RESET}  ${MAUVE}$(pad "${f[3]}" "${w[3]}")${RESET}  $(latency_colour "${f[4]}")$(pad "${f[4]}" "${w[4]}")${RESET}  ${TEAL}$(pad "${f[5]}" "${w[5]}")${RESET}  ${DIM}${f[6]}${RESET}"
+    if [[ -n $share_head ]]; then
+      if [[ $(readlink -f "${f[0]}") == "$share_real" ]]; then
+        share_cell="${GREEN}${BOLD}$(pad ":$share_port" 6)${RESET}  "
+      else
+        share_cell="${DIM}$(pad — 6)${RESET}  "
+      fi
+    fi
+    echo "${BLUE}${BOLD}$(pad "${f[0]}" "${w[0]}")${RESET}  ${alias_cell}${TEXT}$(pad "${f[1]}" "${w[1]}")${RESET}  ${YELLOW}$(pad "${f[2]}" "${w[2]}")${RESET}  ${MAUVE}$(pad "${f[3]}" "${w[3]}")${RESET}  $(latency_colour "${f[4]}")$(pad "${f[4]}" "${w[4]}")${RESET}  ${TEAL}$(pad "${f[5]}" "${w[5]}")${RESET}  ${share_cell}${DIM}${f[6]}${RESET}"
   done
+  [[ -n $share_dev ]] && { echo; share_summary "$share_dev" "$share_port"; }
+}
+
+# ── Sharing ───────────────────────────────────────────────────────────────────
+
+share_die() { echo "${RED}✗${RESET} $*" >&2; exit 1; }
+
+# The source build and its unit, from install.sh --ser2net. apt's ser2net is
+# deliberately not enough: its 4.6.0 never answers an RFC 2217 PURGE-DATA,
+# which older clients wait for.
+share_need_ser2net() {
+  [[ -x /usr/local/sbin/ser2net && -f $SHARE_UNIT ]] \
+    || share_die "ser2net is not set up — run ./install.sh --ser2net in the dotfiles"
+}
+
+# The device and TCP port the current config shares as RFC 2217, as
+# "DEVICE PORT", or nothing when it shares none.
+shared() {
+  [[ -r $SHARE_CONFIG ]] || return
+  awk '
+    /accepter:.*telnet\(rfc2217\)/ { n = split($0, a, ","); port = a[n]; gsub(/[^0-9]/, "", port) }
+    /connector:.*serialdev/ && port != "" {
+      split($0, b, ","); dev = b[2]; gsub(/[[:space:]]/, "", dev)
+      print dev, port; exit
+    }' "$SHARE_CONFIG"
+}
+
+# One "LABEL ADDRESS" line per network this host is on, Ethernet first: a
+# cable has far less delay and jitter than Wi-Fi, and over Wi-Fi a remote
+# bench sees timeouts. Container bridges and loopback are left out.
+addresses() {
+  local ifname addr kind label
+  while read -r _ ifname _ addr _; do
+    case $ifname in lo|docker*|br-*|veth*|virbr*) continue ;; esac
+    if [[ -d /sys/class/net/$ifname/wireless ]]; then kind=2 label=Wi-Fi
+    elif [[ $ifname == tun* || $ifname == wg* || $ifname == tailscale* ]]; then kind=3 label=VPN
+    else kind=1 label=Ethernet
+    fi
+    echo "$kind $label ${addr%/*}"
+  done < <(ip -4 -o addr show) | sort -n | cut -d' ' -f2-
+}
+
+# The addresses of the clients connected to TCP port $1, comma-separated.
+clients() {
+  ss -tnH state established "( sport = :$1 )" 2>/dev/null \
+    | awk '{ p = $NF; sub(/:[0-9]+$/, "", p); gsub(/^\[(::ffff:)?|\]$/, "", p); print p }' \
+    | sort -u | paste -sd, - | sed 's/,/, /g'
+}
+
+# Where the share of $1 on TCP port $2 is reached from, and who has it.
+share_summary() {
+  local dev=$1 port=$2 boot first=1 label addr peers
+  boot=$(systemctl is-enabled ser2net 2>/dev/null)
+  echo "${GREEN}●${RESET} Shared on the network: ${BLUE}${BOLD}$dev${RESET} on port ${BOLD}$port${RESET}  ${DIM}($([[ $boot == enabled ]] && echo "also after a reboot" || echo "until a reboot"); ser2net $(/usr/local/sbin/ser2net -v 2>/dev/null | grep -oP '\d+\.\d+\.\d+'))${RESET}"
+  [[ -c $dev ]] || echo "  ${YELLOW}!${RESET} $dev is not plugged in"
+  ss -ltnH "( sport = :$port )" | grep -q . \
+    || echo "  ${RED}✗${RESET} nothing listens on port $port — see: journalctl -u ser2net -n 20"
+  while read -r label addr; do
+    if (( first )); then
+      echo "  ${TEXT}$(pad "$label" 8)${RESET}  ${TEAL}rfc2217://$addr:$port${RESET}  ${DIM}← use this one${RESET}"
+      first=0
+    else
+      echo "  ${DIM}$(pad "$label" 8)  rfc2217://$addr:$port${RESET}"
+    fi
+  done < <(addresses)
+  peers=$(clients "$port")
+  if [[ -n $peers ]]; then
+    echo "  ${MAUVE}Connected:${RESET} $peers"
+  else
+    echo "  ${DIM}Nobody connected. One client at a time: whoever connects last takes the port.${RESET}"
+  fi
+}
+
+share() {
+  local dev=$1 port=$2 cur_dev cur_port
+  share_need_ser2net
+  read -r cur_dev cur_port < <(shared)
+  dev=${dev:-${cur_dev:-$SHARE_DEFAULT_DEVICE}}
+  port=${port:-${cur_port:-$SHARE_DEFAULT_PORT}}
+  [[ $dev == /* ]] || dev=/dev/$dev
+  [[ -c $dev ]] || share_die "$dev is not a serial device — \`ports\` lists what is plugged in"
+  [[ $port =~ ^[0-9]+$ ]] && (( port > 0 && port < 65536 )) || share_die "$port is not a TCP port"
+
+  # Whatever was there first (Debian's examples, or a hand-written config) is
+  # kept once, beside it, before the first rewrite.
+  if [[ -e $SHARE_CONFIG ]] && ! grep -qF "$SHARE_MARK" "$SHARE_CONFIG" && [[ ! -e $SHARE_CONFIG.orig ]]; then
+    sudo cp "$SHARE_CONFIG" "$SHARE_CONFIG.orig" || share_die "could not back up $SHARE_CONFIG"
+    echo "${DIM}Kept the previous config as $SHARE_CONFIG.orig${RESET}"
+  fi
+
+  sudo tee "$SHARE_CONFIG" >/dev/null <<EOF || share_die "could not write $SHARE_CONFIG"
+%YAML 1.1
+---
+$SHARE_MARK: it rewrites this file, \`ports unshare\` stops sharing.
+# telnet(rfc2217): the client sets the baud rate and sends BREAKs.
+# tcp(nodelay): without it, replies longer than one FTDI USB packet are held
+# back until the client ACKs, and reads time out.
+connection: &shared
+    accepter: telnet(rfc2217),tcp(nodelay),$port
+    enable: on
+    options:
+      kickolduser: true
+    connector: serialdev,$dev,3000000n81,local
+EOF
+
+  sudo systemctl enable --quiet ser2net && sudo systemctl restart ser2net \
+    || share_die "ser2net did not start — see: journalctl -u ser2net -n 20"
+  sleep 0.5
+  list
+}
+
+unshare() {
+  share_need_ser2net
+  sudo systemctl disable --quiet --now ser2net || share_die "could not stop ser2net"
+  echo "${DIM}○${RESET} Not shared — the adapters are this machine's alone again"
 }
 
 # Column widths for -w lines, indexed like describe's fields (0 device,
@@ -236,6 +390,8 @@ watch_ports() {
 case $1 in
   "")         list ;;
   -w|--watch) watch_ports ;;
+  share)      share "$2" "$3" ;;
+  unshare)    unshare ;;
   -h|--help)  usage ;;
   *)          usage >&2; exit 2 ;;
 esac
