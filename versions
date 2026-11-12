@@ -1,0 +1,23 @@
+# Tool versions ./install.sh --setup installs exactly, upgrading or downgrading
+# to match, so every machine compiles and formats code the same way. Set them
+# to whatever your CI builds with.
+#
+# Override any of them on one machine in ~/.config/dotfiles/versions (same
+# format, untracked). "latest" in either file tracks upstream instead. LLVM can
+# also be set with ./install.sh --llvm, which writes ~/.config/llvm/version.
+
+llvm=18.1.8        # clangd, clang-format, clang-tidy, lld; clang-format output differs between patch releases
+clang=19           # the clang/clang++ compiler (apt clang-19); C23 constexpr needs 19 or newer
+arm-gcc=15.3.rel1  # Arm GNU Toolchain release; its GCC reports 15.3.1
+cmake=4.4.2
+ninja=1.13.2
+ruff=0.16.1        # formatter output changes between releases; projects require exactly this one
+
+# Powerlevel10k and the Oh My Zsh plugins, by commit (full hash). --setup checks
+# each clone out at exactly this commit; "latest" follows upstream's newest.
+powerlevel10k=433bb250037d1baf479adf06ce78b3a338c574a4
+zsh-autosuggestions=85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5
+zsh-syntax-highlighting=e6683f20e5c38d3e5447f45845d04ddda75d0f23
+fzf-tab=24105b15714bfec37989ed5c5b6e60f572253019
+fzf-git=57ef995e245923ae05721e876c42100a1896ad6c
+zsh-bat=467337613c1c220c0d01d69b19d2892935f43e9f

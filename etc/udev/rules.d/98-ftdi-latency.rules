@@ -1,0 +1,7 @@
+# Set the latency timer to 1 ms on every FTDI port. The chip holds received
+# bytes for up to this long (16 ms by default) before sending a short packet,
+# which stalls request/response protocols. ftdi_sio is the only driver that
+# exposes latency_timer, so other USB-serial chips are left alone.
+# Installed by install.sh --setup. A 99-*.rules file runs after this one, so
+# a machine-local rule there can set a different value for one device.
+ACTION=="add", SUBSYSTEM=="tty", DRIVERS=="ftdi_sio", RUN+="/bin/sh -c 'echo 1 > /sys/bus/usb-serial/devices/%k/latency_timer'"

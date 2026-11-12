@@ -1,0 +1,5 @@
+# yazi colours for Catppuccin Macchiato. The theme picker links ~/.config/yazi/theme.toml
+# here; the flavor itself is in flavors/catppuccin-macchiato.yazi.
+[flavor]
+dark  = "catppuccin-macchiato"
+light = "catppuccin-macchiato"

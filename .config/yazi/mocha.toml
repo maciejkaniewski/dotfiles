@@ -1,0 +1,5 @@
+# yazi colours for Catppuccin Mocha. The theme picker links ~/.config/yazi/theme.toml
+# here; the flavor itself is in flavors/catppuccin-mocha.yazi.
+[flavor]
+dark  = "catppuccin-mocha"
+light = "catppuccin-mocha"

@@ -1,0 +1,5 @@
+# StyLua settings for this config, used by <leader>cf (conform.nvim). Without
+# a config file StyLua indents with tabs.
+indent_type = "Spaces"
+indent_width = 4
+column_width = 120

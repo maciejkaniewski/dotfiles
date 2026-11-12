@@ -1,0 +1,25 @@
+[delta "dracula"]
+	blame-palette = "#282a36 #21222c #191a21 #343746 #44475a"
+	commit-decoration-style = "#6272a4" bold box ul
+	dark = true
+	file-decoration-style = "#6272a4"
+	file-style = "#f8f8f2"
+	hunk-header-decoration-style = "#6272a4" box ul
+	hunk-header-file-style = bold
+	hunk-header-line-number-style = bold "#bd93f9"
+	hunk-header-style = file line-number syntax
+	line-numbers-left-style = "#6272a4"
+	line-numbers-minus-style = bold "#ff5555"
+	line-numbers-plus-style = bold "#50fa7b"
+	line-numbers-right-style = "#6272a4"
+	line-numbers-zero-style = "#6272a4"
+	minus-emph-style = bold syntax "#7c2f38"
+	minus-style = syntax "#4a2730"
+	plus-emph-style = bold syntax "#2f5a3a"
+	plus-style = syntax "#243e2c"
+	map-styles = \
+		bold purple => syntax "#7a5ba6", \
+		bold blue => syntax "#5a6ea6", \
+		bold cyan => syntax "#4a94a6", \
+		bold yellow => syntax "#a6a24a"
+	syntax-theme = Dracula

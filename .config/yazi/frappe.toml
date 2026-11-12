@@ -1,0 +1,5 @@
+# yazi colours for Catppuccin Frappé. The theme picker links ~/.config/yazi/theme.toml
+# here; the flavor itself is in flavors/catppuccin-frappe.yazi.
+[flavor]
+dark  = "catppuccin-frappe"
+light = "catppuccin-frappe"

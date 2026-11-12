@@ -1,0 +1,9 @@
+# Prepended, so yazi's own defaults stay in place underneath.
+#
+# Enter runs `open` by default, and yazi's open rule for a folder is "edit":
+# Enter on a directory started nvim there (and neo-tree took over). smart-enter
+# goes into a directory and opens a file.
+[[mgr.prepend_keymap]]
+on   = "<Enter>"
+run  = "plugin smart-enter"
+desc = "Enter the directory, or open the file"

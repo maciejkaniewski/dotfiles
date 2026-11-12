@@ -1,0 +1,5 @@
+# yazi colours for Gruvbox Dark. The theme picker links ~/.config/yazi/theme.toml
+# here; the flavor itself is in flavors/gruvbox-dark.yazi.
+[flavor]
+dark  = "gruvbox-dark"
+light = "gruvbox-dark"
