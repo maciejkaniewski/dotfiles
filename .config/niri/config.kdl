@@ -223,10 +223,10 @@ window-rule {
     min-height 340
 }
 
-// The terminal tools Waybar opens: Wi-Fi, sound and Bluetooth, each in a
+// The terminal tools Waybar opens: Wi-Fi, sound, Bluetooth and disk, each in a
 // floating kitty of the same size.
 window-rule {
-    match app-id="^kitty$" title="^(nmtui|pulsemixer|bluetui)$"
+    match app-id="^kitty$" title="^(nmtui|pulsemixer|bluetui|disk)$"
     open-floating true
     default-column-width { fixed 900; }
     default-window-height { fixed 560; }

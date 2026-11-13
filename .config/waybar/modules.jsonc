@@ -29,7 +29,12 @@
             "app_id<.*[Cc]ode.*>": "󰨞",
             "app_id<.*[Ff]irefox.*>": "󰈹",
             "app_id<.*([Cc]hrome|[Cc]hromium).*>": "",
-            "app_id<.*[Ss]lack.*>": "󰒱",
+            // Slack: a dot on its icon while anything is unread (its title starts
+            // with *), a red one for mentions (!). Slack sends no unread count
+            // outside Ubuntu's own dock, so there is no number to show.
+            "app_id<.*slack.*> title<!": "󰒱<span size='small' rise='5pt' foreground='#f38ba8'>●</span>",
+            "app_id<.*slack.*> title<\\*": "󰒱<span size='small' rise='5pt'>●</span>",
+            "app_id<.*slack.*> title<(?![*!])": "󰒱",
             "app_id<.*[Tt]hunderbird.*>": "󰇮",
             "app_id<([Tt]hunar|org.gnome.Nautilus)>": "󰉋",
             "app_id<Angry IP Scanner>": "󰌘",
@@ -89,12 +94,13 @@
         "on-click": "kitty --title btop -e btop"
     },
     // How full / is; hover for free space and the network's speed
-    // (.local/bin/waybar-io).
+    // (.local/bin/waybar-io). Click for the disks (duf) and what takes the
+    // space in your home folder (dust), in a floating kitty.
     "custom/io": {
         "exec": "waybar-io",
         "return-type": "json",
         "restart-interval": 10,
-        "on-click": "kitty --title btop -e btop"
+        "on-click": "kitty --title disk --hold sh -c 'duf --only local --hide-fs squashfs,tmpfs,vfat; echo; dust -d 1 -n 15 ~'"
     },
     // coretemp is Intel's CPU sensor; set k10temp on an AMD machine.
     "temperature": {
