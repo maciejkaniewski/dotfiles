@@ -176,6 +176,16 @@ window-rule {
     open-floating true
 }
 
+// Angry IP Scanner (Java, through X11) opens its dialogs (scan statistics,
+// preferences) floating but far too small for their contents.
+window-rule {
+    match app-id="^Angry IP Scanner$"
+    exclude title=" - Angry IP Scanner"
+    open-floating true
+    min-width 460
+    min-height 340
+}
+
 // The terminal tools Waybar opens: Wi-Fi, sound and Bluetooth, each in a
 // floating kitty of the same size.
 window-rule {

@@ -19,9 +19,9 @@ window-rule {
     match is-focused=true
     shadow {
         on
-        softness 40
-        spread 6
+        softness 30
+        spread 2
         offset x=0 y=0
-        color "#b7bdf855"
+        color "#b7bdf830"
     }
 }

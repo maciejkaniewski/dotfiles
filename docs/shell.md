@@ -25,6 +25,13 @@ Upstream p10k gates this on *not being on a branch*, so a tagged commit on `main
 | `la` | `eza -a --group-directories-first --icons=auto` |
 | `lt` | `eza --tree --level=2 --icons=auto` |
 
+**Opening things**
+
+| Command | What it does |
+|---|---|
+| `y` | [yazi](https://github.com/sxyazi/yazi) in this folder; quitting with `q` leaves the shell in the folder you browsed to |
+| `o [path…]` | Opens files or folders (default: this folder) in their desktop app, folders in the file manager (Thunar under niri). Detached, so the prompt comes straight back, unlike plain `xdg-open` |
+
 `cpwd` copies the current directory to the clipboard, without a trailing
 newline, through `kitten clipboard`. `gweb` opens the current repo's `origin`
 in the browser (GitHub or GitLab, built from the remote URL, no login needed).

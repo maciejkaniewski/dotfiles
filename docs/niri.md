@@ -35,6 +35,7 @@ Then log out, pick niri from the gear on the login screen, and press `Super+Shif
 | Clipboard for X11 tools | `.local/bin/xclip` answers xclip from the Wayland clipboard in a Wayland session. xwayland-satellite's X11 copy can lag, and tools that try xclip first (Claude Code's image paste) pasted a stale screenshot |
 | Night light | wlsunset: warmer colours from 20:00 to 06:00 (change the times in `config.kdl`) |
 | Wallpaper | swaybg, showing the theme's wallpaper (`.config/niri/wallpapers/{variant}.svg`: its dark tones with soft glows of its accents), which changes with the theme picker |
+| Files | Thunar, set as the app for folders (`xdg-open .`, `o`), instead of GNOME Files, which waits on GNOME's Tracker indexer and stays tied to the terminal. yazi (`Super+E`, `y`) for the terminal |
 | Settings | GNOME's Settings app (`Super+,`) for Wi-Fi, Bluetooth and sound; monitors are set in `local.kdl` instead |
 | X11 apps | xwayland-satellite, which niri starts by itself when the first X11 app connects |
 | Screen sharing | xdg-desktop-portal-gnome, so call apps can share one window or a whole screen |
@@ -97,7 +98,7 @@ The volume, brightness and media keys work as usual, also on the lock screen.
 - Slack, Thunderbird and Teams open on workspace 1. A rule can only target a named workspace, so workspace 1 is one, named "1": niri puts named workspaces first and keeps them even when empty, so the numbering stays 1, 2, 3 and `Super+1` reaches it.
 - Calculator, Settings, Calendar, the network connection editor and `nmtui` float.
 - A workspace's only window sits in the middle of the screen.
-- Dialogs float on their own.
+- Dialogs float on their own. Angry IP Scanner's (Java, through X11) float at a minimum of 460×340, since they otherwise open far too small for their contents.
 - Clicking a tray icon or notification of Slack, Discord or Telegram brings its window forward (`honor-xdg-activation-with-invalid-serial`), and only the focused window counts as active, so Electron apps (Slack, Teams, VS Code) don't hold back notifications (`deactivate-unfocused-windows`). Both are niri debug options, which may change between releases.
 
 ## Themes

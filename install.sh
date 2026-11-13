@@ -2466,9 +2466,9 @@ WAYBAR_BUILD_DEPS=(libgtkmm-3.0-dev libjsoncpp-dev libfmt-dev libspdlog-dev libg
   libxkbregistry-dev libevdev-dev)
 # What the session runs: X11 support, launcher, notifications, lock and idle,
 # wallpaper, the polkit password prompt, the media and brightness keys,
-# clipboard history, night light, and the sound mixer Waybar opens.
+# clipboard history, night light, the sound mixer Waybar opens, and Thunar.
 NIRI_SESSION_PKGS=(xwayland fuzzel mako-notifier swaylock swayidle swaybg policykit-1-gnome
-  playerctl brightnessctl cliphist wl-clipboard wlsunset pulsemixer papirus-icon-theme)
+  playerctl brightnessctl cliphist wl-clipboard wlsunset pulsemixer papirus-icon-theme thunar)
 NIRI_LINKS=(
   "niri|$DOTFILES/.config/niri/config.kdl:$HOME/.config/niri/config.kdl"
   "niri|$DOTFILES/.config/waybar/config.jsonc:$HOME/.config/waybar/config.jsonc"
@@ -2623,6 +2623,18 @@ vscode_use_keyring() {
     || log_error "VS Code" "could not edit ~/.vscode/argv.json"
 }
 
+# Thunar as the app for folders (xdg-open ., links to a folder), in place of
+# GNOME Files: it starts at once and doesn't wait on GNOME's Tracker indexer.
+# mimeapps.list is per user, so GNOME's session uses it too.
+default_file_manager() {
+  command_exists xdg-mime && [[ -f /usr/share/applications/thunar.desktop ]] || return 0
+  [[ "$(xdg-mime query default inode/directory)" == thunar.desktop ]] \
+    && { log_skip "file manager: Thunar"; return; }
+  xdg-mime default thunar.desktop inode/directory \
+    && log_ok "file manager → Thunar (folders, xdg-open)" \
+    || log_error "file manager" "xdg-mime default failed"
+}
+
 install_niri_desktop() {
   local missing=() dep
   for dep in "${NIRI_BUILD_DEPS[@]}" "${WAYBAR_BUILD_DEPS[@]}" "${NIRI_SESSION_PKGS[@]}"; do
@@ -2651,6 +2663,7 @@ install_niri_desktop() {
   write_niri_local
   ensure_login_path
   vscode_use_keyring
+  default_file_manager
 }
 
 cmd_niri() {

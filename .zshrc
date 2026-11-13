@@ -263,6 +263,16 @@ y() {
   rm -f -- "$tmp"
 }
 
+# o — open files or folders (default: this one) in their desktop app, folders
+# in the file manager. Detached, so the prompt comes straight back; plain
+# xdg-open keeps some apps tied to the terminal until they close.
+o() {
+  local f
+  for f in "${@:-.}"; do
+    xdg-open "$f" &>/dev/null &!
+  done
+}
+
 # direnv — the hook that loads and unloads a directory's .envrc as you cd
 (( ! ${+commands[direnv]} )) || emulate zsh -c "$(direnv hook zsh)"
 
