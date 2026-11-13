@@ -50,7 +50,14 @@ tooltip {
     background: @surface;
     color: @fg;
 }
+/* active: the workspace each screen is showing; focused: the one you're on.
+   Only the screen with focus gets the bright pill, so you can tell which it
+   is even with no window open there. */
 #workspaces button.active {
+    color: @fg;
+    background: alpha(@accent, 0.18);
+}
+#workspaces button.focused {
     color: @bg;
     background: @accent;
 }
@@ -64,7 +71,7 @@ tooltip {
     color: @fg;
 }
 
-#cpu, #memory, #temperature, #network, #custom-serial,
+#cpu, #memory, #temperature, #custom-serial,
 #tray, #idle_inhibitor, #bluetooth, #pulseaudio, #power-profiles-daemon, #battery, #custom-power {
     padding: 0 8px;
 }
@@ -73,8 +80,6 @@ tooltip {
 #memory               { color: @mem; }
 #temperature          { color: @temp; }
 #temperature.critical { color: @bg; background: @temp; border-radius: 8px; }
-#network              { color: @net; }
-#network.disconnected { color: @overlay; }
 #custom-serial        { color: @date; }
 
 #idle_inhibitor           { color: @overlay; }

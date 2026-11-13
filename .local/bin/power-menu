@@ -4,7 +4,7 @@
 choice=$(printf '%s\n' "󰌾  Lock" "󰤄  Suspend" "󰍃  Log out" "󰜉  Reboot" "󰐥  Shut down" \
     | fuzzel --dmenu --lines 5 --width 18) || exit 0
 case "$choice" in
-    *Lock)        swaylock -f -i "$HOME/.config/niri/wallpaper.svg" ;;
+    *Lock)        lock-screen ;;
     *Suspend)     systemctl suspend ;;   # swayidle locks the screen first
     *"Log out")   niri msg action quit --skip-confirmation ;;
     *Reboot)      systemctl reboot ;;

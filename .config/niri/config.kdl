@@ -101,10 +101,14 @@ screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
 
 // The session's helpers. X11 apps need nothing here: niri starts
 // xwayland-satellite on its own when the first one connects.
-// Waybar's output goes to a log, so a crash leaves its reason behind.
-spawn-sh-at-startup "mkdir -p ~/.cache/waybar; exec waybar > ~/.cache/waybar/waybar.log 2>&1"
+// Waybar through .local/bin/waybar-launch: the full bar on the main screen,
+// slim ones elsewhere, restarted when screens come or go, logged to
+// ~/.cache/waybar/waybar.log.
+spawn-at-startup "waybar-launch"
 spawn-at-startup "mako"
 spawn-at-startup "/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1"
+// Low-battery warnings (15%, 5%) and power-saver at 20%, as GNOME gave.
+spawn-at-startup "battery-notify"
 // A notification whenever a USB serial adapter is plugged in or out.
 spawn-at-startup "ports" "--notify"
 // Clipboard history for Super+Shift+C: text and images, as they're copied.
@@ -115,8 +119,8 @@ spawn-at-startup "wlsunset" "-s" "20:00" "-S" "06:00" "-t" "4000"
 // which also restarts swaybg on a switch). Blur behind kitty shows it.
 spawn-sh-at-startup "exec swaybg -m fill -i ~/.config/niri/wallpaper.svg"
 // Lock after 10 minutes idle, screens off after 15, and lock before suspend.
-// swaylock shows the theme's wallpaper behind its password ring.
-spawn-sh-at-startup "exec swayidle -w timeout 600 'swaylock -f -i ~/.config/niri/wallpaper.svg' timeout 900 'niri msg action power-off-monitors' before-sleep 'swaylock -f -i ~/.config/niri/wallpaper.svg'"
+// .local/bin/lock-screen sets the lock screen's look in one place.
+spawn-sh-at-startup "exec swayidle -w timeout 600 lock-screen timeout 900 'niri msg action power-off-monitors' before-sleep lock-screen"
 
 window-rule {
     geometry-corner-radius 8
@@ -209,7 +213,7 @@ binds {
     Mod+Return hotkey-overlay-title=null { spawn "kitty"; }
     Mod+D hotkey-overlay-title="Run an application: fuzzel" { spawn "fuzzel"; }
     Mod+E hotkey-overlay-title="Browse files: yazi" { spawn "kitty" "--title" "yazi" "-e" "yazi"; }
-    Super+Alt+L hotkey-overlay-title="Lock the screen: swaylock" { spawn-sh "swaylock -i ~/.config/niri/wallpaper.svg"; }
+    Super+Alt+L hotkey-overlay-title="Lock the screen" { spawn "lock-screen"; }
     Ctrl+Alt+Delete hotkey-overlay-title="Power menu" { spawn "power-menu"; }
     Mod+N hotkey-overlay-title="Bring back the last notification" { spawn "makoctl" "restore"; }
     Mod+Shift+N hotkey-overlay-title="Dismiss all notifications" { spawn "makoctl" "dismiss" "--all"; }
@@ -219,15 +223,17 @@ binds {
     // needs GNOME itself; monitors are set in local.kdl.
     Mod+Comma hotkey-overlay-title="Settings" { spawn-sh "XDG_CURRENT_DESKTOP=GNOME gnome-control-center"; }
 
-    XF86AudioRaiseVolume  allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.05+ -l 1.0"; }
-    XF86AudioLowerVolume  allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.05-"; }
-    XF86AudioMute         allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"; }
-    XF86AudioMicMute      allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"; }
+    // Volume, mic and brightness go through .local/bin/osd, which also shows
+    // the new level as a pop-up with a progress bar.
+    XF86AudioRaiseVolume  allow-when-locked=true { spawn "osd" "volume" "up"; }
+    XF86AudioLowerVolume  allow-when-locked=true { spawn "osd" "volume" "down"; }
+    XF86AudioMute         allow-when-locked=true { spawn "osd" "volume" "mute"; }
+    XF86AudioMicMute      allow-when-locked=true { spawn "osd" "mic" "mute"; }
     XF86AudioPlay         allow-when-locked=true { spawn "playerctl" "play-pause"; }
     XF86AudioPrev         allow-when-locked=true { spawn "playerctl" "previous"; }
     XF86AudioNext         allow-when-locked=true { spawn "playerctl" "next"; }
-    XF86MonBrightnessUp   allow-when-locked=true { spawn "brightnessctl" "--class=backlight" "set" "+10%"; }
-    XF86MonBrightnessDown allow-when-locked=true { spawn "brightnessctl" "--class=backlight" "set" "10%-"; }
+    XF86MonBrightnessUp   allow-when-locked=true { spawn "osd" "brightness" "up"; }
+    XF86MonBrightnessDown allow-when-locked=true { spawn "osd" "brightness" "down"; }
 
     Mod+O repeat=false { toggle-overview; }
     Mod+Q repeat=false { close-window; }
@@ -267,6 +273,12 @@ binds {
     Mod+Shift+J     { focus-monitor-down; }
     Mod+Shift+K     { focus-monitor-up; }
     Mod+Shift+L     { focus-monitor-right; }
+
+    // The whole workspace, with all its windows, to the monitor that way.
+    Mod+Alt+Left  { move-workspace-to-monitor-left; }
+    Mod+Alt+Right { move-workspace-to-monitor-right; }
+    Mod+Alt+Up    { move-workspace-to-monitor-up; }
+    Mod+Alt+Down  { move-workspace-to-monitor-down; }
 
     Mod+Shift+Ctrl+Left  { move-column-to-monitor-left; }
     Mod+Shift+Ctrl+Down  { move-column-to-monitor-down; }
@@ -325,6 +337,8 @@ binds {
     Mod+Shift+F { fullscreen-window; }
     // Hide or show Waybar; windows take the space while it's hidden.
     Mod+B hotkey-overlay-title="Hide or show the bar" { spawn "pkill" "-USR1" "-x" "waybar"; }
+    // The focused screen gets the full bar (system readouts, tray, controls).
+    Mod+Shift+B hotkey-overlay-title="Make this the main bar's screen" { spawn "waybar-launch" "--set-main"; }
     Mod+Ctrl+F  { expand-column-to-available-width; }
     Mod+C       { center-column; }
     Mod+Minus       { set-column-width "-10%"; }

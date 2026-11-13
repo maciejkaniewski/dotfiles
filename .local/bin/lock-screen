@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# lock-screen: lock the niri session. Super+Alt+L, the power menu and swayidle
+# (idle, before suspend) all run this, so the look is set in one place.
+#
+# The theme's wallpaper behind the ring: nothing to capture or blur, so the
+# lock is instant. With swaylock-effects (which --niri builds into
+# /usr/local/bin, patched for a second clock), the ring always shows the time
+# and date, and under them the first zone of ~/.config/waybar/timezones, the
+# same machine-local file as Waybar's extra clocks. Plain swaylock, should
+# that be the one on PATH, still locks. Colours come from
+# ~/.config/swaylock/config, which the theme picker links. -f returns once the
+# screen is locked, so swayidle's before-sleep waits for it before suspending.
+
+wallpaper="$HOME/.config/niri/wallpaper.svg"
+
+if swaylock --help 2>&1 | grep -q -- '--clock'; then
+    zones="$HOME/.config/waybar/timezones"
+    [[ -r $zones ]] && SWAYLOCK_EXTRA_TZ=$(sed 's/#.*//; s/[[:space:]]//g; /^$/d' "$zones" | head -1)
+    export SWAYLOCK_EXTRA_TZ
+    exec swaylock -f -i "$wallpaper" --clock --indicator --indicator-radius 130 \
+        --timestr '%H:%M' --datestr '%a %d %b' "$@"
+fi
+exec swaylock -f -i "$wallpaper" "$@"

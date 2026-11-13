@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# battery-notify: low-battery warnings for a session without GNOME, which
+# used to give them. The niri session starts it at login. While discharging:
+#   20%  switches to power-saver mode (as GNOME does); the previous mode comes
+#        back when the charger is plugged in
+#   15%  a notification
+#    5%  an urgent one, which stays until dismissed
+# Checks once a minute; exits at once on a machine without a battery, or when
+# another copy already runs in this session. BATTERY_DIR and BATTERY_INTERVAL
+# override the battery and the interval, for testing.
+
+bats=(/sys/class/power_supply/BAT*)
+bat=${BATTERY_DIR:-${bats[0]}}
+interval=${BATTERY_INTERVAL:-60}
+[[ -r $bat/capacity ]] || exit 0
+
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/battery-notify.lock"
+flock -n 9 || exit 0
+
+# last: the lowest level warned about since the charger was last plugged in.
+last=100 saved_profile=""
+while :; do
+    capacity=$(<"$bat/capacity") status=$(<"$bat/status")
+    if [[ $status == Discharging ]]; then
+        if (( capacity <= 20 )) && [[ -z $saved_profile ]] && command -v powerprofilesctl >/dev/null; then
+            saved_profile=$(powerprofilesctl get)
+            [[ $saved_profile != power-saver ]] && powerprofilesctl set power-saver
+        fi
+        if (( capacity <= 5 && last > 5 )); then
+            notify-send -a battery -u critical -i battery-empty "Battery critically low: $capacity%" "Plug in the charger now."
+            last=5
+        elif (( capacity <= 15 && last > 15 )); then
+            notify-send -a battery -i battery-low "Battery low: $capacity%" "Power-saver mode is on."
+            last=15
+        fi
+    else
+        # On the charger: forget the warnings, and put back the power mode
+        # the 20% switch replaced.
+        if [[ -n $saved_profile && $saved_profile != power-saver ]]; then
+            powerprofilesctl set "$saved_profile"
+        fi
+        last=100 saved_profile=""
+    fi
+    sleep "$interval"
+done

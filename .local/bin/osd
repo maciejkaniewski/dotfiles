@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# osd: change the volume or brightness and show the new level as a small
+# notification with a progress bar, like GNOME's on-screen display. The niri
+# session binds the volume and brightness keys to it. Each call replaces the
+# previous pop-up instead of stacking a new one.
+#
+#   osd volume up|down|mute      osd mic mute      osd brightness up|down
+
+id_file="${XDG_RUNTIME_DIR:-/tmp}/osd.id"
+
+show() {  # title, level 0-100, body
+    local id
+    id=$(cat "$id_file" 2>/dev/null)
+    notify-send -a osd -e -t 1500 -h "int:value:$2" -p ${id:+-r "$id"} "$1" "$3" > "$id_file.new" \
+        && mv -f "$id_file.new" "$id_file"
+}
+
+# The screen's backlight is root's to write. Like GNOME, ask systemd-logind,
+# which lets the user of the graphical session set their own screen's
+# brightness: no video group, no setuid helper. Steps of 10%, never below 5%
+# so the screen can't go black.
+backlight() {
+    local devs=(/sys/class/backlight/*) dev max cur new sid path
+    dev=${devs[0]}
+    [[ -r $dev/max_brightness ]] || return 1
+    max=$(<"$dev/max_brightness") cur=$(<"$dev/brightness")
+    new=$(( cur + $1 * max / 100 ))
+    (( new < max * 5 / 100 )) && new=$(( max * 5 / 100 ))
+    (( new > max )) && new=$max
+    sid=${XDG_SESSION_ID:-$(loginctl show-user "$USER" -p Display --value)}
+    path=$(busctl call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager \
+        GetSession s "$sid" | awk '{ gsub(/"/, "", $2); print $2 }')
+    busctl call org.freedesktop.login1 "$path" org.freedesktop.login1.Session \
+        SetBrightness ssu backlight "${dev##*/}" "$new"
+}
+
+brightness_level() {
+    local devs=(/sys/class/backlight/*)
+    echo $(( $(<"${devs[0]}/brightness") * 100 / $(<"${devs[0]}/max_brightness") ))
+}
+
+sink=@DEFAULT_AUDIO_SINK@ source=@DEFAULT_AUDIO_SOURCE@
+case "$1 $2" in
+    "volume up")       wpctl set-volume -l 1.0 "$sink" 5%+; wpctl set-mute "$sink" 0 ;;
+    "volume down")     wpctl set-volume "$sink" 5%- ;;
+    "volume mute")     wpctl set-mute "$sink" toggle ;;
+    "mic mute")        wpctl set-mute "$source" toggle ;;
+    "brightness up")   backlight 10 ;;
+    "brightness down") backlight -10 ;;
+    *) echo "usage: osd volume up|down|mute | mic mute | brightness up|down" >&2; exit 2 ;;
+esac
+
+case $1 in
+    volume|mic)
+        dev=$sink; [[ $1 == mic ]] && dev=$source
+        read -r _ vol muted < <(wpctl get-volume "$dev")
+        level=$(awk -v v="$vol" 'BEGIN { printf "%d", v * 100 + 0.5 }')
+        if [[ $1 == mic ]]; then
+            if [[ -n $muted ]]; then show "󰍭  Microphone" 0 "muted"; else show "󰍬  Microphone" "$level" "on"; fi
+        elif [[ -n $muted ]]; then
+            show "󰝟  Volume" 0 "muted"
+        else
+            icon=󰕾; (( level < 34 )) && icon=󰕿; (( level >= 34 && level < 67 )) && icon=󰖀
+            show "$icon  Volume" "$level" "$level%"
+        fi
+        ;;
+    brightness)
+        level=$(brightness_level)
+        show "󰃠  Brightness" "$level" "$level%"
+        ;;
+esac

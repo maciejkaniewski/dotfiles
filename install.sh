@@ -2463,22 +2463,30 @@ NIRI_BUILD_DEPS=(gcc clang libudev-dev libgbm-dev libxkbcommon-dev libegl1-mesa-
   libdisplay-info-dev libxcb1-dev libxcb-cursor-dev)
 WAYBAR_BUILD_DEPS=(libgtkmm-3.0-dev libjsoncpp-dev libfmt-dev libspdlog-dev libgtk-layer-shell-dev
   wayland-protocols libdbusmenu-gtk3-dev libupower-glib-dev libpulse-dev libnl-3-dev libnl-genl-3-dev
-  libxkbregistry-dev libevdev-dev)
+  libxkbregistry-dev libevdev-dev libpam0g-dev)
 # What the session runs: X11 support, launcher, notifications, lock and idle,
-# wallpaper, the polkit password prompt, the media and brightness keys,
+# wallpaper, the polkit password prompt, the media keys,
 # clipboard history, night light, the sound mixer Waybar opens, and Thunar.
 NIRI_SESSION_PKGS=(xwayland fuzzel mako-notifier swaylock swayidle swaybg policykit-1-gnome
-  playerctl brightnessctl cliphist wl-clipboard wlsunset pulsemixer papirus-icon-theme thunar)
+  playerctl cliphist wl-clipboard wlsunset pulsemixer papirus-icon-theme thunar)
 NIRI_LINKS=(
   "niri|$DOTFILES/.config/niri/config.kdl:$HOME/.config/niri/config.kdl"
   "niri|$DOTFILES/.config/waybar/config.jsonc:$HOME/.config/waybar/config.jsonc"
+  "niri|$DOTFILES/.config/waybar/modules.jsonc:$HOME/.config/waybar/modules.jsonc"
   "niri|$DOTFILES/.config/waybar/style.css:$HOME/.config/waybar/style.css"
   "niri|$DOTFILES/.local/bin/power-menu:$HOME/.local/bin/power-menu"
   "niri|$DOTFILES/.local/bin/waybar-calendar:$HOME/.local/bin/waybar-calendar"
   "niri|$DOTFILES/.local/bin/xclip:$HOME/.local/bin/xclip"
+  "niri|$DOTFILES/.local/bin/osd:$HOME/.local/bin/osd"
+  "niri|$DOTFILES/.local/bin/lock-screen:$HOME/.local/bin/lock-screen"
+  "niri|$DOTFILES/.local/bin/waybar-launch:$HOME/.local/bin/waybar-launch"
+  "niri|$DOTFILES/.local/bin/battery-notify:$HOME/.local/bin/battery-notify"
 )
 # xwayland-satellite has no --version, so the build records what it installed.
 XWS_STAMP=/usr/local/share/dotfiles/xwayland-satellite.version
+# swaylock-effects is patched (patches/swaylock-effects/), and only a build
+# that applied the patches writes this, so an unpatched one gets rebuilt.
+SLE_STAMP=/usr/local/share/dotfiles/swaylock-effects.version
 
 # Newest release tag of GitHub repo $1, without a leading v. github_latest only
 # matches X.Y.Z, and niri numbers its releases YY.MM.
@@ -2492,6 +2500,7 @@ niri_installed_version() {
     niri)               [[ -x "$NIRI_BIN" ]] && "$NIRI_BIN" --version 2>/dev/null | awk '{print $2}' ;;
     waybar)             [[ -x /usr/local/bin/waybar ]] && /usr/local/bin/waybar --version 2>/dev/null | grep -oP 'v\K[0-9.]+' ;;
     xwayland-satellite) [[ -x /usr/local/bin/xwayland-satellite && -f "$XWS_STAMP" ]] && cat "$XWS_STAMP" ;;
+    swaylock-effects)   [[ -x /usr/local/bin/swaylock && -f "$SLE_STAMP" ]] && cat "$SLE_STAMP" ;;
   esac
 }
 
@@ -2537,7 +2546,25 @@ waybar_build_install() {
     && sudo install -m 755 build/waybar /usr/local/bin/
 }
 
-# Builds one of the three when it is missing or off its pin. $1 is the versions
+# swaylock-effects: swaylock plus a clock (and effects we don't use), for
+# .local/bin/lock-screen. Only the binary goes to /usr/local/bin, where it wins
+# over apt's swaylock on PATH; apt's stays installed for /etc/pam.d/swaylock,
+# the PAM config both use to check the password.
+# The patches in patches/swaylock-effects/ are applied first; second-time-zone
+# adds the extra clock line lock-screen asks for.
+swaylock_effects_build_install() {
+  local version="$1" patch
+  for patch in "$DOTFILES"/patches/swaylock-effects/*.patch; do
+    git apply "$patch" || return 1
+  done
+  meson setup build --buildtype=release -Dman-pages=disabled -Dgdk-pixbuf=enabled \
+    && ninja -C build \
+    && sudo install -m 755 build/swaylock /usr/local/bin/swaylock \
+    && sudo install -Dm 644 /dev/null "$SLE_STAMP" \
+    && printf '%s\n' "$version" | sudo tee "$SLE_STAMP" >/dev/null
+}
+
+# Builds one of the source-built tools when it is missing or off its pin. $1 is the versions
 # file key, $2 the GitHub repo, $3 the tag prefix ("v" or nothing), $4 the step.
 install_niri_component() {
   local key="$1" repo="$2" prefix="$3" step="$4" pin want have
@@ -2653,6 +2680,7 @@ install_niri_desktop() {
   install_niri_component niri niri-wm/niri v niri_build_install || return 1
   install_niri_component xwayland-satellite Supreeeme/xwayland-satellite v xws_build_install
   install_niri_component waybar Alexays/Waybar "" waybar_build_install
+  install_niri_component swaylock-effects jirutka/swaylock-effects v swaylock_effects_build_install
   install_bluetui
 
   local section_l src dst
@@ -3285,7 +3313,7 @@ verify_ser2net() {
 # the config, with its theme and local includes, parses.
 verify_niri() {
   local key v versions=""
-  for key in niri xwayland-satellite waybar; do
+  for key in niri xwayland-satellite waybar swaylock-effects; do
     v=$(niri_installed_version "$key")
     [[ -n "$v" ]] || { echo "$key missing (run --niri)"; return 1; }
     versions+="$key $v, "

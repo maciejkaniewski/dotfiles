@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# waybar-launch: run Waybar with the full bar on one "main" screen and slim
+# bars on the others (see .config/waybar/config.jsonc).
+#
+#   waybar-launch              start Waybar, then restart it whenever screens
+#                              come or go (the niri session runs this at login)
+#   waybar-launch --set-main   make the focused screen the main one
+#                              (Super+Shift+B)
+#
+# The main screen is remembered in ~/.config/waybar/main-output, machine-local,
+# by make, model and serial, so it doesn't matter which dock port it's in.
+# When that screen isn't connected, the laptop's own takes the full bar, then
+# whichever comes first. Waybar's output goes to ~/.cache/waybar/waybar.log.
+
+state="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/main-output"
+pidfile="${XDG_RUNTIME_DIR:-/tmp}/waybar-launch.pid"
+log="${XDG_CACHE_HOME:-$HOME/.cache}/waybar/waybar.log"
+
+# Connector name (DP-7, eDP-1) of the screen that gets the full bar.
+pick_main() {
+    local want
+    want=$(cat "$state" 2>/dev/null)
+    niri msg -j outputs | jq -r --arg want "$want" '
+        [.[] | {name, id: "\(.make) \(.model) \(.serial // "Unknown")"}] as $o
+        | first(($o[] | select(.id == $want) | .name),
+                ($o[] | select(.name | startswith("eDP")) | .name),
+                ($o | sort_by(.name) | .[].name))'
+}
+
+if [[ $1 == --set-main ]]; then
+    mkdir -p "${state%/*}"
+    niri msg -j focused-output | jq -r '"\(.make) \(.model) \(.serial // "Unknown")"' > "$state"
+    pid=$(cat "$pidfile" 2>/dev/null)
+    [[ -n $pid ]] && kill -USR1 "$pid" 2>/dev/null
+    exit 0
+fi
+
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/waybar-launch.lock"
+flock -n 9 || exit 0
+echo $$ > "$pidfile"
+
+start() {
+    pkill -x waybar
+    while pgrep -x waybar >/dev/null; do sleep 0.1; done
+    mkdir -p "${log%/*}"
+    WAYBAR_MAIN=$(pick_main) waybar > "$log" 2>&1 &
+}
+trap start USR1
+
+start
+screens=""
+# niri reports docking and undocking as workspaces moving between screens.
+while :; do
+    IFS= read -r event; rc=$?
+    (( rc > 128 )) && continue   # interrupted by --set-main's signal
+    (( rc == 0 )) || break
+    [[ $event == *WorkspacesChanged* ]] || continue
+    now=$(jq -r '.WorkspacesChanged.workspaces | map(.output) | unique | join(",")' <<<"$event")
+    if [[ $now != "$screens" ]]; then
+        [[ -n $screens ]] && start
+        screens=$now
+    elif ! pgrep -x waybar >/dev/null; then
+        start                    # Waybar died; bring it back
+    fi
+done < <(niri msg -j event-stream)

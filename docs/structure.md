@@ -90,8 +90,13 @@ dotfiles/
 │   └── bin/
 │       ├── git-credential-bw          # git credential helper — HTTPS logins from the Bitwarden vault
 │       ├── ports                      # list / watch USB serial ports, share one on the network
+│       ├── battery-notify             # niri: low-battery warnings, power-saver at 20%
+│       ├── lock-screen                # niri: swaylock-effects, clock and second time zone over the wallpaper
+│       ├── osd                        # niri: volume / brightness keys, with a level pop-up
 │       ├── power-menu                 # niri: lock / suspend / log out / reboot / shut down, in fuzzel
-│       └── waybar-calendar            # niri: Waybar's date and time, with a Monday-first calendar tooltip
+│       ├── waybar-calendar            # niri: Waybar's date and time, with a Monday-first calendar tooltip
+│       ├── waybar-launch              # niri: Waybar with the full bar on one screen, slim ones elsewhere
+│       └── xclip                      # niri: answers xclip from the Wayland clipboard
 ├── .p10k.zsh
 ├── .ssh/
 │   ├── config                         # shared client settings, includes ~/.ssh/config.local first
@@ -111,5 +116,7 @@ dotfiles/
 ├── LICENSE                            # MIT
 ├── README.md                          # overview and quick start
 ├── install.sh
+├── patches/
+│   └── swaylock-effects/             # applied by --niri before building: second-time-zone adds the lock screen's extra clock
 └── versions                           # exact tool versions --setup and --niri install
 ```

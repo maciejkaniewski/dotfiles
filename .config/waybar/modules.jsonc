@@ -1,0 +1,136 @@
+// Waybar's module definitions and bar layout, shared by both bars in
+// config.jsonc (each includes this file): the main bar and the slim side bars.
+{
+    "layer": "bottom",
+    "position": "top",
+    "height": 32,
+    "margin-top": 6,
+    "margin-left": 8,
+    "margin-right": 8,
+    "spacing": 6,
+
+    "group/system": {
+        "orientation": "horizontal",
+        "modules": ["cpu", "memory", "temperature", "custom/serial"]
+    },
+    "group/controls": {
+        "orientation": "horizontal",
+        "modules": ["tray", "idle_inhibitor", "bluetooth", "pulseaudio", "power-profiles-daemon", "battery", "custom/power"]
+    },
+
+    // Each workspace's name or number, then an icon per window on it (from
+    // window-rewrite, matched on app ID; other apps get a plain window icon).
+    "niri/workspaces": {
+        "format": "{value} {windows}",
+        "format-window-separator": " ",
+        "window-rewrite-default": "",
+        "window-rewrite": {
+            "app_id<kitty>": "",
+            "app_id<.*[Cc]ode.*>": "󰨞",
+            "app_id<.*[Ff]irefox.*>": "󰈹",
+            "app_id<.*([Cc]hrome|[Cc]hromium).*>": "",
+            "app_id<.*[Ss]lack.*>": "󰒱",
+            "app_id<.*[Tt]hunderbird.*>": "󰇮",
+            "app_id<([Tt]hunar|org.gnome.Nautilus)>": "󰉋",
+            "app_id<Angry IP Scanner>": "󰌘",
+            "app_id<org.gnome.Settings>": "󰒓",
+            "app_id<org.gnome.Calculator>": "󰃬"
+        }
+    },
+
+    // From .local/bin/waybar-calendar rather than Waybar's clock, whose calendar
+    // can't colour weekends. Hover for the month: weeks start on Monday,
+    // Saturday and Sunday are red.
+    "custom/clock": {
+        "exec": "waybar-calendar",
+        "return-type": "json",
+        "interval": 10
+    },
+
+    "cpu": {
+        "interval": 5,
+        "format": "󰍛 {usage}% {avg_frequency}GHz",
+        "tooltip-format": "CPU {usage}%, {min_frequency}–{max_frequency} GHz across cores",
+        "on-click": "kitty --title btop -e btop"
+    },
+    "memory": {
+        "interval": 5,
+        "format": "󰍺 {percentage}%",
+        "tooltip-format": "Memory {used:0.1f} / {total:0.1f} GB\nSwap {swapUsed:0.1f} / {swapTotal:0.1f} GB",
+        "on-click": "kitty --title btop -e btop"
+    },
+    // coretemp is Intel's CPU sensor; set k10temp on an AMD machine.
+    "temperature": {
+        "interval": 5,
+        "hwmon-name": "coretemp",
+        "input-filename": "temp1_input",
+        "critical-threshold": 90,
+        "format": "󰔏 {temperatureC}°",
+        "tooltip-format": "CPU package {temperatureC} °C"
+    },
+
+    // USB serial adapters: how many are plugged in (hidden when none); hover
+    // lists them, click opens `ports -w` to watch them come and go.
+    "custom/serial": {
+        "exec": "ports --waybar",
+        "return-type": "json",
+        "restart-interval": 5,
+        "on-click": "kitty --title ports -e ports -w"
+    },
+    // The tray holds nm-applet's Wi-Fi icon (its menu lists networks and
+    // VPNs), which the session's XDG autostart starts.
+    "tray": {
+        "spacing": 8
+    },
+    // Keep awake: while on, the idle lock and screen-off don't happen.
+    "idle_inhibitor": {
+        "format": "{icon}",
+        "format-icons": { "activated": "󰅶", "deactivated": "󰾪" },
+        "tooltip-format-activated": "Staying awake (click to allow idle lock)",
+        "tooltip-format-deactivated": "Idle lock on (click to stay awake)"
+    },
+    "bluetooth": {
+        "format": "󰂯",
+        "format-off": "󰂲",
+        "format-disabled": "󰂲",
+        "format-connected": "󰂱",
+        "tooltip-format": "Bluetooth {status}",
+        "tooltip-format-connected": "{device_enumerate}",
+        "tooltip-format-enumerate-connected": "{device_alias}",
+        "on-click": "kitty --title bluetui -e bluetui"
+    },
+    "pulseaudio": {
+        "format": "{icon} {volume}%",
+        "format-muted": "󰝟",
+        "format-icons": { "default": ["󰕿", "󰖀", "󰕾"], "headphone": "󰋋" },
+        "tooltip-format": "{desc}",
+        "on-click": "kitty --title pulsemixer -e pulsemixer",
+        "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+    },
+    // GNOME's power modes (power-profiles-daemon, which runs in any session).
+    // Click for the next mode, right-click for the previous one.
+    "power-profiles-daemon": {
+        "format": "{icon}",
+        "format-icons": {
+            "performance": "󰓅",
+            "balanced": "󰾅",
+            "power-saver": "󰾆",
+            "default": "󰾅"
+        },
+        "tooltip-format": "Power mode: {profile}\nClick for the next one"
+    },
+    "battery": {
+        "interval": 30,
+        "states": { "warning": 20, "critical": 10 },
+        "format": "{icon} {capacity}%",
+        "format-charging": "󰂄 {capacity}%",
+        "format-plugged": "󰚥 {capacity}%",
+        "format-icons": ["󰁺", "󰁼", "󰁾", "󰂀", "󰁹"],
+        "tooltip-format": "{timeTo}"
+    },
+    "custom/power": {
+        "format": "⏻",
+        "tooltip-format": "Lock, suspend, log out, reboot or shut down",
+        "on-click": "power-menu"
+    }
+}

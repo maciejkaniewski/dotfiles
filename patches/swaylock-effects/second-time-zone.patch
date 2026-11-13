@@ -1,0 +1,75 @@
+diff --git i/render.c w/render.c
+index 368a4bc..7e622ec 100644
+--- i/render.c
++++ w/render.c
+@@ -1,7 +1,10 @@
++#define _POSIX_C_SOURCE 200809L
+ #include <math.h>
+ #include <stdlib.h>
+ #include <time.h>
+ #include <locale.h>
++#include <stdio.h>
++#include <string.h>
+ #include <wayland-client.h>
+ #include "cairo.h"
+ #include "background-image.h"
+@@ -69,6 +72,33 @@ static void timetext(struct swaylock_surface *surface, char **tstr, char **dstr)
+ 	setlocale(LC_TIME, prevloc);
+ }
+ 
++// A second clock under the date: the time zone named in $SWAYLOCK_EXTRA_TZ
++// (an IANA name such as America/New_York), as "Thu 10:45 EST". The zone's
++// abbreviation names it; a city name doesn't fit inside the ring. Returns NULL
++// when the variable is unset or empty.
++static const char *extra_tz_text(void) {
++	static char buf[64];
++	const char *zone = getenv("SWAYLOCK_EXTRA_TZ");
++	if (!zone || !*zone) {
++		return NULL;
++	}
++
++	const char *old = getenv("TZ");
++	char *saved = old ? strdup(old) : NULL;
++	setenv("TZ", zone, 1);
++	tzset();
++	time_t t = time(NULL);
++	strftime(buf, sizeof(buf), "%a %H:%M %Z", localtime(&t));
++	if (saved) {
++		setenv("TZ", saved, 1);
++		free(saved);
++	} else {
++		unsetenv("TZ");
++	}
++	tzset();
++	return buf;
++}
++
+ void render_frame_background(struct swaylock_surface *surface, bool commit) {
+ 	struct swaylock_state *state = surface->state;
+ 
+@@ -364,6 +394,25 @@ void render_frame(struct swaylock_surface *surface) {
+ 			if (new_width < extents_l2.width)
+ 				new_width = extents_l2.width;
+ 
++			/* Third line: the second time zone, if one is set */
++
++			const char *text_l3 = extra_tz_text();
++			if (text_l3) {
++				cairo_text_extents_t extents_l3;
++				cairo_font_extents_t fe_l3;
++				cairo_set_font_size(cairo, arc_radius / 7.0f);
++				cairo_text_extents(cairo, text_l3, &extents_l3);
++				cairo_font_extents(cairo, &fe_l3);
++				cairo_move_to(cairo,
++					(buffer_width / 2) - (extents_l3.width / 2 + extents_l3.x_bearing),
++					(buffer_diameter / 2) + (fe_l3.height / 2 - fe_l3.descent) + arc_radius / 1.75f);
++				cairo_show_text(cairo, text_l3);
++				cairo_close_path(cairo);
++				cairo_new_sub_path(cairo);
++				if (new_width < extents_l3.width)
++					new_width = extents_l3.width;
++			}
++
+ 
+ 			cairo_set_font_size(cairo, font_size);
+ 		}
