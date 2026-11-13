@@ -2485,6 +2485,7 @@ NIRI_LINKS=(
   "niri|$DOTFILES/.local/bin/battery-notify:$HOME/.local/bin/battery-notify"
   "niri|$DOTFILES/.local/bin/wallpaper:$HOME/.local/bin/wallpaper"
   "niri|$DOTFILES/.local/bin/waybar-io:$HOME/.local/bin/waybar-io"
+  "niri|$DOTFILES/.local/bin/waybar-thermal:$HOME/.local/bin/waybar-thermal"
   "niri|$DOTFILES/.local/bin/waybar-cast:$HOME/.local/bin/waybar-cast"
 )
 # xwayland-satellite has no --version, so the build records what it installed.
@@ -2956,6 +2957,7 @@ apply_theme() {
       gsettings set org.gnome.desktop.interface icon-theme Papirus-Dark \
         && log_ok "${SUBTEXT}icon theme → Papirus-Dark${RESET}"
     fi
+    write_gtk3_settings
   fi
 
   # niri reloads its own config; a running Waybar and mako need telling, and
@@ -2970,6 +2972,33 @@ apply_theme() {
   # The lock screen's PNG of the new wallpaper (.local/bin/lock-screen).
   [[ -n "$NIRI_SOCKET" ]] && command_exists lock-screen && { lock-screen --prepare &>/dev/null & }
   return 0
+}
+
+# The same GTK settings in ~/.config/gtk-3.0/settings.ini, for GTK 3 apps that
+# run under X11 (STM32CubeIDE and other Eclipse-based IDEs force it). Under
+# GNOME they get the settings over XSETTINGS from gnome-settings-daemon; niri
+# has nothing that serves XSETTINGS, so without this file they'd fall back to
+# light Yaru. GNOME's own values win wherever it runs, so the file is harmless
+# there.
+write_gtk3_settings() {
+  local key val out="$HOME/.config/gtk-3.0/settings.ini"
+  local -A gtk=([gtk-theme]=gtk-theme-name [icon-theme]=gtk-icon-theme-name
+                [font-name]=gtk-font-name [cursor-theme]=gtk-cursor-theme-name
+                [cursor-size]=gtk-cursor-theme-size)
+  mkdir -p "${out%/*}"
+  {
+    echo "# Written by ./install.sh --theme from GNOME's settings; see write_gtk3_settings."
+    echo "[Settings]"
+    for key in gtk-theme icon-theme font-name cursor-theme cursor-size; do
+      val=$(gsettings get org.gnome.desktop.interface "$key" 2>/dev/null) || continue
+      val=${val#uint32 }; val=${val//\'/}
+      echo "${gtk[$key]}=$val"
+    done
+    [[ $(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null) == *dark* ]] \
+      && echo "gtk-application-prefer-dark-theme=1"
+  } > "$out.tmp" && mv "$out.tmp" "$out" \
+    && log_ok "${SUBTEXT}GTK 3 settings.ini (for X11 apps) → $(gsettings get org.gnome.desktop.interface gtk-theme | tr -d "'")${RESET}" \
+    || log_error "GTK 3 settings" "could not write ${out#"$HOME/"}"
 }
 
 configure_theme() {

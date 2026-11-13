@@ -13,7 +13,7 @@
 }
 
 window#waybar {
-    background: alpha(@bg, 0.82);
+    background: alpha(@bg, 0.72);
     border: 1px solid alpha(@accent, 0.2);
     border-radius: 14px;
     color: @fg;
@@ -83,8 +83,9 @@ window#waybar.side #workspaces button {
     color: @fg;
 }
 
-/* Sharing or recording the screen: a red island by the clock. */
-#custom-cast {
+/* Sharing or recording the screen, or a mic in use: red islands by the clock. */
+#custom-cast,
+#privacy {
     background: @temp;
     color: @bg;
     border-radius: 10px;
@@ -92,18 +93,18 @@ window#waybar.side #workspaces button {
     padding: 0 12px;
 }
 
-#cpu, #memory, #custom-io, #temperature, #custom-serial,
+#cpu, #memory, #custom-io, #custom-thermal, #custom-serial,
 #tray, #idle_inhibitor, #bluetooth, #pulseaudio, #power-profiles-daemon, #battery, #custom-power {
     padding: 0 8px;
 }
 
-#cpu                  { color: @cpu; }
-#memory               { color: @mem; }
-#custom-io            { color: @net; }
-#custom-io.warning    { color: @bg; background: @temp; border-radius: 8px; }
-#temperature          { color: @temp; }
-#temperature.critical { color: @bg; background: @temp; border-radius: 8px; }
-#custom-serial        { color: @date; }
+#cpu                     { color: @cpu; }
+#memory                  { color: @mem; }
+#custom-io               { color: @net; }
+#custom-io.warning       { color: @bg; background: @temp; border-radius: 8px; }
+#custom-thermal          { color: @temp; }
+#custom-thermal.critical { color: @bg; background: @temp; border-radius: 8px; }
+#custom-serial           { color: @date; }
 
 #idle_inhibitor           { color: @overlay; }
 #idle_inhibitor.activated { color: @date; }
@@ -118,4 +119,7 @@ window#waybar.side #workspaces button {
 #battery                  { color: @bat; }
 #battery.warning:not(.charging)  { color: @date; }
 #battery.critical:not(.charging) { color: @bg; background: @temp; border-radius: 8px; }
+#battery.time,
+#battery.time.warning,
+#battery.time.critical    { color: alpha(@fg, 0.75); background: transparent; padding-left: 0; }
 #custom-power             { color: @temp; padding-right: 10px; }

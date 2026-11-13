@@ -15,7 +15,7 @@
         "output": "$WAYBAR_MAIN",
         "include": ["~/.config/waybar/modules.jsonc"],
         "modules-left": ["niri/workspaces", "mpris"],
-        "modules-center": ["custom/cast", "custom/clock"],
+        "modules-center": ["custom/cast", "privacy", "custom/clock"],
         "modules-right": ["group/system", "group/controls"]
     },
     {
@@ -23,7 +23,7 @@
         "output": ["!$WAYBAR_MAIN", "*"],
         "include": ["~/.config/waybar/modules.jsonc"],
         "modules-left": ["niri/workspaces"],
-        "modules-center": ["custom/cast", "custom/clock"],
+        "modules-center": ["custom/cast", "privacy", "custom/clock"],
         "modules-right": [],
         // Plain dots here instead of app icons, so the side screens stay calm;
         // the screen you're on still shows its workspace in the accent colour.

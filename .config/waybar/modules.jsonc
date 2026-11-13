@@ -11,11 +11,11 @@
 
     "group/system": {
         "orientation": "horizontal",
-        "modules": ["cpu", "memory", "custom/io", "temperature", "custom/serial"]
+        "modules": ["cpu", "memory", "custom/io", "custom/thermal", "custom/serial"]
     },
     "group/controls": {
         "orientation": "horizontal",
-        "modules": ["tray", "idle_inhibitor", "bluetooth", "pulseaudio", "power-profiles-daemon", "battery", "custom/power"]
+        "modules": ["tray", "idle_inhibitor", "bluetooth", "pulseaudio", "power-profiles-daemon", "battery", "battery#time", "custom/power"]
     },
 
     // Each workspace's name or number, then an icon per window on it (from
@@ -102,14 +102,12 @@
         "restart-interval": 10,
         "on-click": "kitty --title disk --hold sh -c 'duf --only local --hide-fs squashfs,tmpfs,vfat; echo; dust -d 1 -n 15 ~'"
     },
-    // coretemp is Intel's CPU sensor; set k10temp on an AMD machine.
-    "temperature": {
-        "interval": 5,
-        "hwmon-name": "coretemp",
-        "input-filename": "temp1_input",
-        "critical-threshold": 90,
-        "format": "󰔏 {temperatureC}°",
-        "tooltip-format": "CPU package {temperatureC} °C"
+    // CPU temperature and the fan speed beside it (.local/bin/waybar-thermal);
+    // the fan is left out on machines without a sensor for it.
+    "custom/thermal": {
+        "exec": "waybar-thermal",
+        "return-type": "json",
+        "restart-interval": 10
     },
 
     // USB serial adapters: how many are plugged in (hidden when none); hover
@@ -169,7 +167,31 @@
         "format-charging": "󰂄 {capacity}%",
         "format-plugged": "󰚥 {capacity}%",
         "format-icons": ["󰁺", "󰁼", "󰁾", "󰂀", "󰁹"],
-        "tooltip-format": "{timeTo}"
+        "tooltip-format": "{timeTo}",
+        // The exact draw in the tooltip; smoothed, so the time left doesn't
+        // jump about between readings.
+        "tooltip-format-discharging": "Drawing {power:.1f} W\n{timeTo}",
+        "tooltip-format-charging": "Charging at {power:.1f} W\n{timeTo}",
+        "smooth-power": true
+    },
+    // The time left on battery, or to full while charging, in brackets after
+    // the charge and in the text colour rather than the battery's green
+    // (style.css); nothing when plugged in and full.
+    "battery#time": {
+        "interval": 30,
+        "format": "",
+        "format-discharging": "({time})",
+        "format-charging": "({time})",
+        "format-time": "{H}:{m}",
+        "smooth-power": true,
+        "tooltip": false
+    },
+    // A red microphone by the clock while any app records from a mic, hidden
+    // otherwise; hover names the app. Screen sharing has its own pill
+    // (custom/cast), so only audio-in here.
+    "privacy": {
+        "icon-size": 14,
+        "modules": [{"type": "audio-in", "tooltip-icon-size": 20}]
     },
     "custom/power": {
         "format": "⏻",

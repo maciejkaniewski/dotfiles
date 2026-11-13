@@ -100,6 +100,7 @@ dotfiles/
 │       ├── waybar-cast                # niri: Waybar's red pill while the screen is shared or recorded
 │       ├── waybar-io                  # niri: Waybar's disk readout, network speed in its tooltip
 │       ├── waybar-launch              # niri: Waybar with the full bar on one screen, slim ones elsewhere
+│       ├── waybar-thermal             # niri: Waybar's CPU temperature and fan speed
 │       └── xclip                      # niri: answers xclip from the Wayland clipboard
 ├── .p10k.zsh
 ├── .ssh/

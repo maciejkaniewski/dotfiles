@@ -23,7 +23,7 @@ Then log out, pick niri from the gear on the login screen, and press `Super+Shif
 
 | Part | Tool |
 |---|---|
-| Bar | Waybar, as rounded islands. The **main screen** gets the full bar: workspaces (with an icon per window), what's playing, the clock, system readouts (CPU, memory, disk, temperature, serial adapters), the tray and controls (keep-awake, Bluetooth, volume, power mode, battery, power menu). The **other screens** get a slim bar with their workspaces as dots and the clock. `Super+Shift+B` makes the focused screen the main one, remembered by make, model and serial in the machine-local `~/.config/waybar/main-output`; when that screen isn't connected, the laptop's takes over. `.local/bin/waybar-launch` runs Waybar this way and restarts it when screens come or go. Hovering over the clock shows the month (weeks from Monday, weekends in red) |
+| Bar | Waybar, as rounded islands. The **main screen** gets the full bar: workspaces (with an icon per window), what's playing, the clock, system readouts (CPU, memory, disk, temperature and fan speed, serial adapters), the tray and controls (keep-awake, Bluetooth, volume, power mode, battery, power menu). The **other screens** get a slim bar with their workspaces as dots and the clock. `Super+Shift+B` makes the focused screen the main one, remembered by make, model and serial in the machine-local `~/.config/waybar/main-output`; when that screen isn't connected, the laptop's takes over. `.local/bin/waybar-launch` runs Waybar this way and restarts it when screens come or go. Hovering over the clock shows the month (weeks from Monday, weekends in red) |
 | Launcher | fuzzel (`Super+D`) |
 | Notifications | mako |
 | Network | nm-applet's Wi-Fi icon in Waybar's tray: its menu lists Wi-Fi networks and VPNs. The session's XDG autostart starts it, as GNOME's does |
@@ -36,7 +36,7 @@ Then log out, pick niri from the gear on the login screen, and press `Super+Shif
 | Power menu | `.local/bin/power-menu`: lock, suspend, log out, reboot or shut down, picked in fuzzel |
 | Clipboard history | cliphist stores what you copy, text and images |
 | Volume and brightness | The keys go through `.local/bin/osd`, which changes the level and shows it as a pop-up with a progress bar that replaces itself rather than stacking |
-| Battery | `.local/bin/battery-notify` warns at 15% and urgently at 5% while discharging, and switches to power-saver at 20% (back to the previous mode on the charger), as GNOME does |
+| Battery | `.local/bin/battery-notify` warns at 15% and urgently at 5% while discharging, and switches to power-saver at 20% (back to the previous mode on the charger), as GNOME does. Waybar shows the time left in brackets beside the charge on battery, and the time to full while charging; hovering gives the power draw in watts |
 | Serial ports | `ports --notify` sends a notification whenever a USB serial adapter is plugged in or out, and Waybar shows how many are plugged in (`ports --waybar`, updated on each plug rather than polled): hover lists them, click opens `ports -w` |
 | Notifications | mako, with app icons, one stacked notification per app (with a count), and urgent ones kept until dismissed. `Super+N` brings back the last one, `Super+Shift+N` dismisses all |
 | Clipboard for X11 tools | `.local/bin/xclip` answers xclip from the Wayland clipboard in a Wayland session. xwayland-satellite's X11 copy can lag, and tools that try xclip first (Claude Code's image paste) pasted a stale screenshot |
@@ -45,7 +45,7 @@ Then log out, pick niri from the gear on the login screen, and press `Super+Shif
 | Files | Thunar, set as the app for folders (`xdg-open .`, `o`), instead of GNOME Files, which waits on GNOME's Tracker indexer and stays tied to the terminal. yazi (`Super+E`, `y`) for the terminal |
 | Settings | GNOME's Settings app (`Super+,`) for Wi-Fi, Bluetooth and sound; monitors are set in `local.kdl` instead |
 | X11 apps | xwayland-satellite, which niri starts by itself when the first X11 app connects |
-| Screen sharing | xdg-desktop-portal-gnome, so call apps can share one window or a whole screen. A shared window gets a red border; for a shared screen, and while anything records it, Waybar shows a red "sharing" pill by the clock on every screen (`.local/bin/waybar-cast`, from niri's list of screencasts) |
+| Screen sharing | xdg-desktop-portal-gnome, so call apps can share one window or a whole screen. A shared window gets a red border; for a shared screen, and while anything records it, Waybar shows a red "sharing" pill by the clock on every screen (`.local/bin/waybar-cast`, from niri's list of screencasts). Likewise, a red microphone appears there while any app records from a mic; hover names the app |
 
 **VS Code** picks its password store by recognising the desktop, and doesn't know niri. `--niri` therefore sets `"password-store": "gnome-libsecret"` in `~/.vscode/argv.json`, the same keyring VS Code uses under GNOME.
 
@@ -100,7 +100,7 @@ The volume, brightness and media keys work as usual, also on the lock screen.
 - Floating windows cast a deeper drop shadow and blur what's behind them, so they read as lifted above the tiles.
 - A window shared in a call has a red border for as long as it's shared.
 - The wallpaper sits in the overview's backdrop, so in `Super+O` the workspaces float over it; workspaces themselves are transparent, so it shows behind windows as usual.
-- GTK apps use the Yaru accent closest to the theme (purple, or olive for Gruvbox) and Papirus icons. Both are GNOME-wide settings that `--theme` sets, so GNOME follows too.
+- GTK apps use the Yaru accent closest to the theme (purple, or olive for Gruvbox) and Papirus icons. Both are GNOME-wide settings that `--theme` sets, so GNOME follows too. `--theme` also copies them into `~/.config/gtk-3.0/settings.ini`, for GTK 3 apps that run under X11, such as STM32CubeIDE: GNOME hands those apps its settings, but under niri nothing does, so without the file they open in light Yaru.
 - Waybar's workspace buttons show an icon per window on them (kitty, VS Code, Slack, browsers, Thunar; a plain window icon for others). The side screens' bars show a dot per workspace instead, filled for the one on screen.
 - Waybar sits on the bottom layer, so in the overview (`Super+O`) it zooms out with each workspace instead of staying full size on top. Tiled windows still leave its space free.
 - Animations run a little faster than niri's defaults, and window moves end with a slight spring (`animations` in `config.kdl`).

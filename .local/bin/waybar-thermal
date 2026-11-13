@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# waybar-thermal: Waybar's temperature readout (custom/thermal in
+# .config/waybar/modules.jsonc): the CPU temperature, then the fan speed beside
+# it, "󰔏 62° 󰈐 4.4k". The tooltip has the exact figures and, on a
+# ThinkPad, the fan's control level. A machine without a fan sensor shows the
+# temperature alone.
+#
+# Streams one JSON line every $THERMAL_INTERVAL seconds (default 5), with the
+# class "critical" from 90 °C, as Waybar's own temperature module had.
+
+interval=${THERMAL_INTERVAL:-5}
+
+# The first hwmon device named $1, e.g. coretemp (Intel) or k10temp (AMD).
+hwmon() {
+    local h
+    for h in /sys/class/hwmon/hwmon*; do
+        [[ $(cat "$h/name" 2>/dev/null) == "$1" ]] && { echo "$h"; return; }
+    done
+    return 1
+}
+
+temp_file=""
+for chip in coretemp k10temp zenpower; do
+    h=$(hwmon "$chip") && [[ -r $h/temp1_input ]] && { temp_file=$h/temp1_input; break; }
+done
+[[ -z $temp_file && -r /sys/class/thermal/thermal_zone0/temp ]] && temp_file=/sys/class/thermal/thermal_zone0/temp
+
+fan_file=""
+for f in /sys/class/hwmon/hwmon*/fan[0-9]_input; do
+    [[ -r $f ]] && { fan_file=$f; break; }
+done
+
+while :; do
+    text="" tip="" class=""
+    if [[ -n $temp_file ]]; then
+        t=$(( $(cat "$temp_file") / 1000 ))
+        text="󰔏 ${t}°"
+        tip="CPU ${t} °C"
+        (( t >= 90 )) && class="critical"
+    fi
+    if [[ -n $fan_file ]]; then
+        rpm=$(cat "$fan_file")
+        if (( rpm == 0 )); then
+            short="off"
+        elif (( rpm >= 1000 )); then
+            short=$(awk -v r="$rpm" 'BEGIN { printf "%.1fk", r / 1000 }')
+        else
+            short=$rpm
+        fi
+        text+="${text:+ }󰈐 $short"
+        tip+="${tip:+\n}Fan ${rpm} RPM"
+        level=$(awk '$1 == "level:" { print $2 }' /proc/acpi/ibm/fan 2>/dev/null)
+        [[ -n $level ]] && tip+=" (level $level)"
+    fi
+    printf '{"text": "%s", "tooltip": "%s", "class": "%s"}\n' "$text" "$tip" "$class"
+    sleep "$interval"
+done
