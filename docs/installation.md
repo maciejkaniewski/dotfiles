@@ -12,12 +12,12 @@ cd ~/dotfiles
 | Flag | Description |
 |---|---|
 | _(none)_ | Create dotfile symlinks |
-| `-s`, `--setup` | Full system bootstrap — packages, tools, shell, fonts, symlinks |
+| `-s`, `--setup` | Full system bootstrap — packages, tools, shell, fonts, symlinks. It first asks whether to add the niri tiling session too (default no) |
 | `-c`, `--clean` | Remove all dotfile symlinks |
 | `-v`, `--verify` | Check the installed toolchain actually works |
 | `--theme` | Pick or re-apply the color theme and nothing else — the same step `--setup` ends with |
 | `--identity` | Set your git name and email, and pick the personal or work profile (`~/.zshrc.local`, `~/.ssh/config.local`), and nothing else |
-| `--niri` | Add the [niri](niri.md) tiling session to the login screen, beside GNOME: builds niri, xwayland-satellite and Waybar, installs the session's tools from apt, links its configs. Once installed, `--setup` keeps it at the pinned versions |
+| `--niri` | Add the [niri](niri.md) tiling session to the login screen, beside GNOME: builds niri, xwayland-satellite and Waybar, installs the session's tools from apt, links its configs. The same as answering yes to `--setup`'s question, for a machine that's already set up. Once installed, `--setup` keeps it at the pinned versions without asking |
 | `--llvm [version]` | Show or change which LLVM/Clang version the toolchain runs on this machine — see [Choosing an LLVM version](toolchain.md#choosing-an-llvm-version) |
 | `-h`, `--help` | Show usage |
 

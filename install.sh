@@ -2453,8 +2453,9 @@ cmd_ser2net() {
 
 # ── niri desktop ───────────────────────────────────────────────────────────────
 # niri (a scrollable-tiling Wayland compositor) as a second session on the login
-# screen, beside GNOME. Opt-in with --niri; once it is installed, --setup keeps
-# it at the versions file's pins. niri and xwayland-satellite aren't packaged
+# screen, beside GNOME. Opt-in: --setup asks, or --niri adds it on its own;
+# once it is installed, --setup keeps it at the versions file's pins without
+# asking. niri and xwayland-satellite aren't packaged
 # for Ubuntu 24.04, and its Waybar (0.9.24) predates the niri modules, so all
 # three are built from source; the rest comes from apt.
 NIRI_BIN=/usr/local/bin/niri
@@ -3413,6 +3414,18 @@ cmd_setup() {
   echo
   banner
 
+  # Asked first, so the long run after it needs nobody at the keyboard. Where
+  # niri is already installed there's nothing to ask: --setup keeps it at the
+  # versions file's pins. Without a terminal to ask on, it's left out.
+  local want_niri=false niri_new=false reply
+  if [[ -x "$NIRI_BIN" ]]; then
+    want_niri=true
+  elif [[ -t 0 ]]; then
+    printf "\r\033[K  ${TEXT}Also add the niri tiling session beside GNOME? Builds niri and Waybar from source. [y/N] ${RESET}"
+    reset_tty_for_read; read -r reply
+    [[ "$reply" =~ ^[Yy]$ ]] && want_niri=true niri_new=true
+  fi
+
   # Everything after this needs sudo, so without it there is nothing to continue
   # into: each later step would fail in turn and bury the one real cause.
   install_apt_packages || {
@@ -3484,10 +3497,12 @@ cmd_setup() {
   install_serial_access
   install_ser2net
 
-  # Opt-in (--niri); once installed, kept at the versions file's pins.
-  if [[ -x "$NIRI_BIN" ]]; then
-    section "niri desktop"
+  # Opt-in: the question above, or --niri on its own later.
+  section "niri desktop"
+  if [[ $want_niri == true ]]; then
     install_niri_desktop
+  else
+    log_skip "left out (./install.sh --niri adds it later)"
   fi
 
   # Nothing past this point needs sudo — stop refreshing the credential so the
@@ -3523,6 +3538,9 @@ cmd_setup() {
     echo -e "\r\033[K  ${MAUVE}${BOLD}Done!${RESET} ${YELLOW}Log out and back in, then open Kitty: the new login shell (Zsh) and group memberships start with the next session.${RESET}"
   else
     echo -e "\r\033[K  ${MAUVE}${BOLD}Done!${RESET} ${TEXT}Everything is set up.${RESET}"
+  fi
+  if [[ $niri_new == true && -x "$NIRI_BIN" ]]; then
+    echo -e "\r\033[K  ${TEXT}For niri: log out, pick it from the gear on the login screen. Super+Shift+/ lists the keys.${RESET}"
   fi
   echo
 }
@@ -3755,7 +3773,7 @@ usage() {
   echo
   echo -e "  ${TEXT}${BOLD}Usage:${RESET}"
   echo -e "    ${GREEN}./install.sh${RESET}               ${SUBTEXT}Create dotfile symlinks${RESET}"
-  echo -e "    ${GREEN}./install.sh -s, --setup${RESET}   ${SUBTEXT}Full system bootstrap${RESET}"
+  echo -e "    ${GREEN}./install.sh -s, --setup${RESET}   ${SUBTEXT}Full system bootstrap (asks whether to add niri)${RESET}"
   echo -e "    ${GREEN}./install.sh -c, --clean${RESET}   ${SUBTEXT}Remove all dotfile symlinks${RESET}"
   echo -e "    ${GREEN}./install.sh -v, --verify${RESET}  ${SUBTEXT}Check the installed toolchain works${RESET}"
   echo -e "    ${GREEN}./install.sh --theme${RESET}       ${SUBTEXT}Pick or re-apply the color theme, nothing else${RESET}"

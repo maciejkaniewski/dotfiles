@@ -48,7 +48,7 @@ Then log out and back in, so the session starts with zsh, and open kitty. Near t
 | `./install.sh -v` | Check that the installed toolchain works (no sudo) |
 | `./install.sh --theme` | Pick or re-apply the colour theme |
 | `./install.sh --identity` | Set your git name and email, and the personal or work profile |
-| `./install.sh --niri` | Add the niri tiling session to the login screen |
+| `./install.sh --niri` | Add the niri tiling session to the login screen (`--setup` also offers it) |
 | `./install.sh --llvm [version]` | Show or change the LLVM version |
 | `./install.sh -c` | Remove the config symlinks |
 

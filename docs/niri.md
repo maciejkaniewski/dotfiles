@@ -2,9 +2,11 @@
 
 [niri](https://github.com/niri-wm/niri) is a scrollable-tiling Wayland compositor. Every window opens as a full-height column on a strip that scrolls sideways, so opening a window never shrinks the others. Each monitor has its own strip, and workspaces stack vertically on it, with an empty one always at the end.
 
-It is opt-in and sits beside GNOME rather than replacing it: `./install.sh --niri` adds a **niri** entry to the gear menu on the login screen, and GNOME stays one logout away.
+It is opt-in and sits beside GNOME rather than replacing it: `./install.sh --setup` asks whether to add it (default no), and `./install.sh --niri` adds it later. Either way you get a **niri** entry in the gear menu on the login screen, and GNOME stays one logout away.
 
 ## Install
+
+Answer yes when `./install.sh --setup` asks, or, on a machine that's already set up:
 
 ```bash
 ./install.sh --niri
