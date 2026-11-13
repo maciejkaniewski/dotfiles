@@ -30,6 +30,8 @@ Upstream p10k gates this on *not being on a branch*, so a tagged commit on `main
 | Command | What it does |
 |---|---|
 | `y` | [yazi](https://github.com/sxyazi/yazi) in this folder; quitting with `q` leaves the shell in the folder you browsed to |
+| `vs [path…]` | VS Code on the given files or folders, or on this folder (`code .`) |
+| `nv [path…]` | Neovim on the given files, or on this folder (`nvim .`) |
 | `o [path…]` | Opens files or folders (default: this folder) in their desktop app, folders in the file manager (Thunar under niri). Detached, so the prompt comes straight back, unlike plain `xdg-open` |
 
 `cpwd` copies the current directory to the clipboard, without a trailing

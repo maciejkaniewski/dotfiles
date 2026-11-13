@@ -273,6 +273,11 @@ o() {
   done
 }
 
+# vs, nv — VS Code and Neovim on the given files or folders, or on this folder
+# when given none: `vs` is `code .`, `nv` is `nvim .`.
+vs() { code "${@:-.}" }
+nv() { nvim "${@:-.}" }
+
 # direnv — the hook that loads and unloads a directory's .envrc as you cd
 (( ! ${+commands[direnv]} )) || emulate zsh -c "$(direnv hook zsh)"
 

@@ -180,9 +180,11 @@
     "battery#time": {
         "interval": 30,
         "format": "",
-        "format-discharging": "({time})",
-        "format-charging": "({time})",
-        "format-time": "{H}:{m}",
+        // The brackets are part of the time, so nothing shows while there's
+        // no estimate yet (the first moments after plugging or unplugging).
+        "format-discharging": "{time}",
+        "format-charging": "{time}",
+        "format-time": "({H}:{m})",
         "smooth-power": true,
         "tooltip": false
     },
