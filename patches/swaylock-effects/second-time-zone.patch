@@ -18,7 +18,7 @@ index 368a4bc..7e622ec 100644
  }
  
 +// A second clock under the date: the time zone named in $SWAYLOCK_EXTRA_TZ
-+// (an IANA name such as America/New_York), as "Thu 10:45 EST". The zone's
++// (an IANA name such as America/New_York), as "10:45 EST". The zone's
 +// abbreviation names it; a city name doesn't fit inside the ring. Returns NULL
 +// when the variable is unset or empty.
 +static const char *extra_tz_text(void) {
@@ -33,7 +33,7 @@ index 368a4bc..7e622ec 100644
 +	setenv("TZ", zone, 1);
 +	tzset();
 +	time_t t = time(NULL);
-+	strftime(buf, sizeof(buf), "%a %H:%M %Z", localtime(&t));
++	strftime(buf, sizeof(buf), "%H:%M %Z", localtime(&t));
 +	if (saved) {
 +		setenv("TZ", saved, 1);
 +		free(saved);

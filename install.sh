@@ -2499,6 +2499,11 @@ github_latest_tag() {
     | grep -i '^location:' | grep -oP '/tag/v?\K[0-9][0-9.]*' | tail -1
 }
 
+# Short hash of the swaylock-effects patches, kept in its stamp.
+sle_patch_hash() {
+  cat "$DOTFILES"/patches/swaylock-effects/*.patch | sha256sum | cut -c1-12
+}
+
 niri_installed_version() {
   case "$1" in
     niri)               [[ -x "$NIRI_BIN" ]] && "$NIRI_BIN" --version 2>/dev/null | awk '{print $2}' ;;
@@ -2507,7 +2512,11 @@ niri_installed_version() {
     waybar)             [[ -x /usr/local/bin/waybar ]] && ldd /usr/local/bin/waybar | grep -q libplayerctl \
                           && /usr/local/bin/waybar --version 2>/dev/null | grep -oP 'v\K[0-9.]+' ;;
     xwayland-satellite) [[ -x /usr/local/bin/xwayland-satellite && -f "$XWS_STAMP" ]] && cat "$XWS_STAMP" ;;
-    swaylock-effects)   [[ -x /usr/local/bin/swaylock && -f "$SLE_STAMP" ]] && cat "$SLE_STAMP" ;;
+    # The stamp also records which patches the build applied, so changing a
+    # patch rebuilds it like a version bump would.
+    swaylock-effects)   [[ -x /usr/local/bin/swaylock && -f "$SLE_STAMP" ]] || return 0
+                        local v h; read -r v h < "$SLE_STAMP"
+                        [[ "$h" == "$(sle_patch_hash)" ]] && echo "$v" ;;
   esac
 }
 
@@ -2571,7 +2580,7 @@ swaylock_effects_build_install() {
     && ninja -C build \
     && sudo install -m 755 build/swaylock /usr/local/bin/swaylock \
     && sudo install -Dm 644 /dev/null "$SLE_STAMP" \
-    && printf '%s\n' "$version" | sudo tee "$SLE_STAMP" >/dev/null
+    && printf '%s %s\n' "$version" "$(sle_patch_hash)" | sudo tee "$SLE_STAMP" >/dev/null
 }
 
 # Builds one of the source-built tools when it is missing or off its pin. $1 is the versions

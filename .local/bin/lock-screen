@@ -11,7 +11,7 @@
 # community wallpaper is a JPEG and loads at once; the themes' glow ones are
 # SVGs, which swaylock would take about a second to draw, so for those it gets
 # a PNG rendered at the largest screen's size and kept in ~/.cache/lock-screen.
-# Either way it locks in about a tenth of a second, then eases in over 0.2 s.
+# Either way it appears at once, in about a tenth of a second.
 # Until the PNG exists, the SVG is used and the PNG rendered for next time.
 #
 # With swaylock-effects (which --niri builds into /usr/local/bin, patched for
@@ -74,6 +74,6 @@ if swaylock --help 2>&1 | grep -q -- '--clock'; then
     [[ -r $zones ]] && SWAYLOCK_EXTRA_TZ=$(sed 's/#.*//; s/[[:space:]]//g; /^$/d' "$zones" | head -1)
     export SWAYLOCK_EXTRA_TZ
     exec swaylock -f -i "$image" --clock --indicator --indicator-radius 130 \
-        --timestr '%H:%M' --datestr '%a %d %b' --fade-in 0.2 "$@"
+        --timestr '%H:%M' --datestr '%a %d %b' "$@"
 fi
 exec swaylock -f -i "$image" "$@"
