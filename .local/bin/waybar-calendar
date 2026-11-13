@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Waybar's date and time readouts, with a month calendar as their tooltip.
+
+`waybar-calendar` prints one Waybar JSON line with the date and time
+("Fri 13 Nov 2026  14:05 CET"); `waybar-calendar date` or `time` prints only one.
+Extra time zones, one IANA name per line (America/New_York), go in
+~/.config/waybar/timezones, which is machine-local. With any set, the bar shows
+every zone with its own date, west to east, and the tooltip lists them too.
+This replaces Waybar's own clock module because its calendar can't colour
+single days: here weeks start on Monday, Saturday and Sunday are in the
+theme's red, and today is highlighted. The colours come from the
+@define-color lines of ~/.config/waybar/theme.css, so they follow the theme
+picker.
+"""
+import calendar
+import json
+import os
+import re
+import sys
+import time
+from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+
+def theme_colors() -> dict[str, str]:
+    colors = {}
+    try:
+        with open(os.path.expanduser("~/.config/waybar/theme.css")) as f:
+            for name, value in re.findall(r"@define-color\s+(\w+)\s+(#[0-9a-fA-F]{6})", f.read()):
+                colors[name] = value
+    except OSError:
+        pass
+    return colors
+
+
+def month_markup(now: time.struct_time, c: dict[str, str]) -> str:
+    fg, weekend = c.get("fg", "#cdd6f4"), c.get("temp", "#f38ba8")
+    header, today_bg = c.get("date", "#f9e2af"), c.get("accent", "#b4befe")
+    bg, dim = c.get("bg", "#1e1e2e"), c.get("overlay", "#6c7086")
+
+    cal = calendar.Calendar(firstweekday=calendar.MONDAY)
+    title = time.strftime("%B %Y", now)
+    lines = [f'<span foreground="{header}"><b>{title:^20}</b></span>']
+
+    names = [calendar.day_abbr[d][:2] for d in cal.iterweekdays()]
+    lines.append(" ".join(
+        f'<span foreground="{weekend if i >= 5 else dim}">{n}</span>' for i, n in enumerate(names)))
+
+    for week in cal.monthdayscalendar(now.tm_year, now.tm_mon):
+        cells = []
+        for i, day in enumerate(week):
+            if day == 0:
+                cells.append("  ")
+            elif day == now.tm_mday:
+                cells.append(f'<span background="{today_bg}" foreground="{bg}"><b>{day:2}</b></span>')
+            else:
+                cells.append(f'<span foreground="{weekend if i >= 5 else fg}">{day:2}</span>')
+        lines.append(" ".join(cells))
+    return "<tt>" + "\n".join(lines) + "</tt>"
+
+
+def extra_zones() -> list[ZoneInfo]:
+    zones = []
+    try:
+        with open(os.path.expanduser("~/.config/waybar/timezones")) as f:
+            for line in f:
+                name = line.split("#", 1)[0].strip()
+                if name:
+                    try:
+                        zones.append(ZoneInfo(name))
+                    except (ZoneInfoNotFoundError, ValueError):
+                        pass
+    except OSError:
+        pass
+    return zones
+
+
+def zone_label(zone: ZoneInfo) -> str:
+    return str(zone.key).rsplit("/", 1)[-1].replace("_", " ")
+
+
+def main() -> None:
+    now = time.localtime()
+    mode = sys.argv[1] if sys.argv[1:] else ""
+    fmt = {"date": "󰃭 %d-%m-%Y", "time": "󰥔 %H:%M"}.get(mode, "%a %d %b %Y  %H:%M %Z")
+    text = time.strftime(fmt, now)
+    tooltip = month_markup(now, theme_colors())
+
+    zones = extra_zones() if mode == "" else []
+    if zones:
+        # Every zone, this machine's included, with its own date, ordered west
+        # to east (by UTC offset), so the day reads forward along the bar.
+        system = os.path.realpath("/etc/localtime").split("zoneinfo/", 1)[-1]
+        rows = [(system.rsplit("/", 1)[-1].replace("_", " "), datetime.now().astimezone())]
+        rows += [(zone_label(zone), datetime.now(zone)) for zone in zones]
+        rows.sort(key=lambda row: row[1].utcoffset())
+        text = "  ·  ".join(f"{t:%a %d %b %Y  %H:%M %Z}" for _, t in rows)
+        width = max(len(label) for label, _ in rows)
+        times = "\n".join(f"{label:<{width}}  {t:%a %d %b  %H:%M %Z}" for label, t in rows)
+        tooltip = tooltip[:-len("</tt>")] + "\n\n" + times + "</tt>"
+
+    print(json.dumps({"text": text, "tooltip": tooltip}), flush=True)
+
+
+if __name__ == "__main__":
+    main()

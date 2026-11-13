@@ -1,0 +1,93 @@
+/* Waybar's look: a rounded translucent bar with lighter islands on it. The colours are
+   defined in theme.css, which the theme picker links to one of the
+   {variant}.css files beside this one. */
+@import "theme.css";
+
+* {
+    font-family: "FiraCode Nerd Font";
+    font-size: 13px;
+    font-weight: bold;
+    min-height: 0;
+    border: none;
+    border-radius: 0;
+}
+
+window#waybar {
+    background: alpha(@bg, 0.82);
+    border: 1px solid alpha(@accent, 0.2);
+    border-radius: 14px;
+    color: @fg;
+}
+
+.modules-left  { margin-left: 4px; }
+.modules-right { margin-right: 4px; }
+
+tooltip {
+    background: @bg;
+    border: 2px solid @accent;
+    border-radius: 10px;
+}
+
+/* The islands: workspaces, clock, and the two groups on the right. */
+#workspaces,
+#custom-clock,
+#system,
+#controls {
+    background: alpha(@surface, 0.6);
+    border-radius: 10px;
+    margin: 4px 0;
+    padding: 0 6px;
+}
+
+#workspaces button {
+    padding: 0 9px;
+    margin: 3px 1px;
+    border-radius: 8px;
+    color: @overlay;
+    background: transparent;
+}
+#workspaces button:hover {
+    background: @surface;
+    color: @fg;
+}
+#workspaces button.active {
+    color: @bg;
+    background: @accent;
+}
+#workspaces button.urgent {
+    color: @bg;
+    background: @temp;
+}
+
+#custom-clock {
+    padding: 0 16px;
+    color: @fg;
+}
+
+#cpu, #memory, #temperature, #network, #custom-serial,
+#tray, #idle_inhibitor, #bluetooth, #pulseaudio, #power-profiles-daemon, #battery, #custom-power {
+    padding: 0 8px;
+}
+
+#cpu                  { color: @cpu; }
+#memory               { color: @mem; }
+#temperature          { color: @temp; }
+#temperature.critical { color: @bg; background: @temp; border-radius: 8px; }
+#network              { color: @net; }
+#network.disconnected { color: @overlay; }
+#custom-serial        { color: @date; }
+
+#idle_inhibitor           { color: @overlay; }
+#idle_inhibitor.activated { color: @date; }
+#bluetooth                { color: @time; }
+#bluetooth.off,
+#bluetooth.disabled       { color: @overlay; }
+#pulseaudio               { color: @time; }
+#pulseaudio.muted         { color: @overlay; }
+#power-profiles-daemon             { color: @time; }
+#power-profiles-daemon.performance { color: @cpu; }
+#power-profiles-daemon.power-saver { color: @bat; }
+#battery                  { color: @bat; }
+#battery.warning:not(.charging)  { color: @date; }
+#battery.critical:not(.charging) { color: @bg; background: @temp; border-radius: 8px; }
+#custom-power             { color: @temp; padding-right: 10px; }

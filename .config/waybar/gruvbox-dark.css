@@ -1,0 +1,14 @@
+/* Gruvbox Dark for Waybar. The theme picker links ~/.config/waybar/theme.css here.
+   The module colours are the ones kitty's tab bar uses for the same readouts. */
+@define-color bg      #282828;
+@define-color surface #3c3836;
+@define-color overlay #928374;
+@define-color fg      #ebdbb2;
+@define-color accent  #83a598;
+@define-color cpu     #fe8019;
+@define-color mem     #8ec07c;
+@define-color temp    #fb4934;
+@define-color net     #d3869b;
+@define-color bat     #b8bb26;
+@define-color date    #fabd2f;
+@define-color time    #83a598;

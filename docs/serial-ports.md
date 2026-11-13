@@ -35,6 +35,7 @@ Watching for plug and unplug — Ctrl-C to stop
 |---|---|
 | `ports` | Lists every USB serial port: product string, serial number, driver, latency timer, USB port and stable path. FT2232/FT4232 channels are named `(A)`, `(B)`, … A name a local udev rule gives a port (`SYMLINK+="debug-uart"`) shows in an ALIAS column, which appears only when some port has one |
 | `ports -w` | Lists them, then prints a timestamped `+` or `−` line each time an adapter is plugged in or out, until `Ctrl-C` |
+| `ports --notify` | Sends a desktop notification each time an adapter is plugged in or out, naming its ttys, aliases and product; the channels of a multi-channel adapter arrive as one notification. Meant to run in the background: the [niri](niri.md) session starts it at login, and a second copy exits at once |
 | `ports share DEVICE [PORT]` | Shares DEVICE on the network on TCP PORT as well as whatever is shared already, now and at boot, or moves it to PORT (below) |
 | `ports unshare DEVICE\|PORT` | Stops sharing that one; the others stay shared and connected |
 | `ports unshare [--all]` | Stops sharing all of them, now and at boot. Bare, only when one is shared; with several it lists them and asks which |

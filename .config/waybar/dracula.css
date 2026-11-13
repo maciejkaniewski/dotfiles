@@ -1,0 +1,14 @@
+/* Dracula for Waybar. The theme picker links ~/.config/waybar/theme.css here.
+   The module colours are the ones kitty's tab bar uses for the same readouts. */
+@define-color bg      #282a36;
+@define-color surface #44475a;
+@define-color overlay #6272a4;
+@define-color fg      #f8f8f2;
+@define-color accent  #bd93f9;
+@define-color cpu     #ffb86c;
+@define-color mem     #bd93f9;
+@define-color temp    #ff5555;
+@define-color net     #ff79c6;
+@define-color bat     #50fa7b;
+@define-color date    #f1fa8c;
+@define-color time    #8be9fd;

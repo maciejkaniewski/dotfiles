@@ -1,0 +1,15 @@
+// Catppuccin Mocha for niri. The theme picker links ~/.config/niri/theme.kdl here.
+layout {
+    focus-ring {
+        active-color "#b4befe"
+        inactive-color "#6c7086"
+        urgent-color "#f38ba8"
+    }
+    shadow {
+        color "#11111baa"
+    }
+}
+
+overview {
+    backdrop-color "#11111b"
+}

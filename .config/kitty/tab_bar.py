@@ -5,6 +5,12 @@ from kitty.tab_bar import DrawData, ExtraData, TabBarData, draw_tab_with_powerli
 
 INTERVAL = 5  # seconds between updates
 
+# Under niri, Waybar shows the CPU, memory, temperature, network, battery and
+# clock readouts, so this bar drops them and keeps what only kitty knows: the
+# host and IP of the active window, which follow it into ssh sessions. niri
+# sets NIRI_SOCKET for everything it starts.
+DESKTOP_BAR = bool(os.environ.get("NIRI_SOCKET"))
+
 # Palettes — keys map to the variant stored in ~/.config/theme/current.
 # Order: BG, DATE, TIME, BAT, CPU, MEM, NET, IP, TEMP, SEP.
 _CATPPUCCIN_PALETTES = {
@@ -321,6 +327,9 @@ def _active_host_info() -> tuple[str, str | None]:
 def _update_cache() -> None:
     global _cache
     segments = []
+    if DESKTOP_BAR:
+        _cache = segments
+        return
 
     # hostname is intentionally NOT cached here — it is resolved dynamically
     # in draw_tab so it reflects the active window's SSH state on every draw.
@@ -377,7 +386,7 @@ def draw_tab(
     extra_data: ExtraData,
 ) -> int:
     global _timer_id
-    if _timer_id is None:
+    if _timer_id is None and not DESKTOP_BAR:
         _timer_id = add_timer(_on_timer, INTERVAL, True)
 
     end = draw_tab_with_powerline(
@@ -422,7 +431,7 @@ def draw_tab(
         available = screen.columns - screen.cursor.x - 1
 
         # Drop groups from highest priority downward until it fits
-        for threshold in range(max(g for g, _, _ in tagged), -1, -1):
+        for threshold in range(max((g for g, _, _ in tagged), default=0), -1, -1):
             visible = [(c, t) for g, c, t in tagged if g <= threshold]
             full = sep.join(t for _, t in visible) + " "
             if len(full) <= available:

@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# xclip, answered from the Wayland clipboard in a Wayland session.
+#
+# Under niri, X11 apps get the clipboard through xwayland-satellite, whose X11
+# copy can lag behind: a screenshot niri just took sat in the Wayland
+# clipboard while xclip still returned an image from minutes before. Tools
+# that try xclip before wl-paste (Claude Code's image paste does) then paste
+# the stale one. So with WAYLAND_DISPLAY set, the common forms (reading or
+# writing the clipboard or primary selection, with or without -t) go to
+# wl-paste / wl-copy; anything else, and every X11 session, runs the real
+# xclip unchanged.
+
+real=/usr/bin/xclip
+[[ -n $WAYLAND_DISPLAY ]] && command -v wl-paste >/dev/null || exec "$real" "$@"
+
+selection=primary target="" mode=in trim=false
+args=("$@")
+while (( $# )); do
+    case $1 in
+        -selection|-sel|-se|-s) selection=$2; shift ;;
+        -target|-t)             target=$2; shift ;;
+        -out|-o)                mode=out ;;
+        -in|-i)                 mode=in ;;
+        -rmlastnl|-r)           trim=true ;;
+        -silent|-quiet|-q)      ;;
+        *)                      exec "$real" "${args[@]}" ;;   # a file, -loops, -display, ...
+    esac
+    shift
+done
+
+case $selection in
+    c*) primary=() ;;                 # clipboard
+    p*) primary=(--primary) ;;
+    *)  exec "$real" "${args[@]}" ;;  # secondary has no Wayland equivalent
+esac
+
+if [[ $mode == out ]]; then
+    [[ $target == TARGETS ]] && exec wl-paste "${primary[@]}" --list-types
+    exec wl-paste "${primary[@]}" --no-newline ${target:+--type "$target"}
+fi
+$trim && primary+=(--trim-newline)
+exec wl-copy "${primary[@]}" ${target:+--type "$target"}

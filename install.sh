@@ -543,6 +543,22 @@ fix_ssh_modes() {
   chmod go-w "$DOTFILES/.ssh/config"
 }
 
+# The desktop session, GNOME or niri, starts through a zsh login shell, which
+# reads ~/.zprofile but never ~/.zshrc. So what the session launches directly
+# (niri's Super+T kitty, kitty -e yazi) finds only what ~/.zprofile puts on
+# PATH; ~/.zshrc's entries reach interactive shells alone. ~/.zprofile stays
+# machine-local (other installers append to it too), so this adds one marked
+# line rather than linking the file.
+ensure_login_path() {
+  local zprofile="$HOME/.zprofile" marker="# dotfiles: login-session PATH"
+  if grep -qF "$marker" "$zprofile" 2>/dev/null; then
+    log_skip_link ".zprofile (login-session PATH already set)"; return
+  fi
+  printf '\n%s (see ensure_login_path in install.sh)\nexport PATH="$HOME/.local/kitty.app/bin:$HOME/.local/bin:$PATH"\n' "$marker" >> "$zprofile" \
+    && log_linked ".zprofile (kitty and ~/.local/bin on the login-session PATH)" \
+    || log_error ".zprofile" "could not append the PATH line"
+}
+
 make_link() {
   local src="$1" dst="$2"
   local name="${dst#"$HOME/"}"
@@ -2435,6 +2451,235 @@ cmd_ser2net() {
   install_ser2net
 }
 
+# ── niri desktop ───────────────────────────────────────────────────────────────
+# niri (a scrollable-tiling Wayland compositor) as a second session on the login
+# screen, beside GNOME. Opt-in with --niri; once it is installed, --setup keeps
+# it at the versions file's pins. niri and xwayland-satellite aren't packaged
+# for Ubuntu 24.04, and its Waybar (0.9.24) predates the niri modules, so all
+# three are built from source; the rest comes from apt.
+NIRI_BIN=/usr/local/bin/niri
+NIRI_BUILD_DEPS=(gcc clang libudev-dev libgbm-dev libxkbcommon-dev libegl1-mesa-dev libwayland-dev
+  libinput-dev libdbus-1-dev libsystemd-dev libseat-dev libpipewire-0.3-dev libpango1.0-dev
+  libdisplay-info-dev libxcb1-dev libxcb-cursor-dev)
+WAYBAR_BUILD_DEPS=(libgtkmm-3.0-dev libjsoncpp-dev libfmt-dev libspdlog-dev libgtk-layer-shell-dev
+  wayland-protocols libdbusmenu-gtk3-dev libupower-glib-dev libpulse-dev libnl-3-dev libnl-genl-3-dev
+  libxkbregistry-dev libevdev-dev)
+# What the session runs: X11 support, launcher, notifications, lock and idle,
+# wallpaper, the polkit password prompt, the media and brightness keys,
+# clipboard history, night light, and the sound mixer Waybar opens.
+NIRI_SESSION_PKGS=(xwayland fuzzel mako-notifier swaylock swayidle swaybg policykit-1-gnome
+  playerctl brightnessctl cliphist wl-clipboard wlsunset pulsemixer)
+NIRI_LINKS=(
+  "niri|$DOTFILES/.config/niri/config.kdl:$HOME/.config/niri/config.kdl"
+  "niri|$DOTFILES/.config/waybar/config.jsonc:$HOME/.config/waybar/config.jsonc"
+  "niri|$DOTFILES/.config/waybar/style.css:$HOME/.config/waybar/style.css"
+  "niri|$DOTFILES/.local/bin/power-menu:$HOME/.local/bin/power-menu"
+  "niri|$DOTFILES/.local/bin/waybar-calendar:$HOME/.local/bin/waybar-calendar"
+  "niri|$DOTFILES/.local/bin/xclip:$HOME/.local/bin/xclip"
+)
+# xwayland-satellite has no --version, so the build records what it installed.
+XWS_STAMP=/usr/local/share/dotfiles/xwayland-satellite.version
+
+# Newest release tag of GitHub repo $1, without a leading v. github_latest only
+# matches X.Y.Z, and niri numbers its releases YY.MM.
+github_latest_tag() {
+  curl -fsIL "https://github.com/$1/releases/latest" 2>/dev/null \
+    | grep -i '^location:' | grep -oP '/tag/v?\K[0-9][0-9.]*' | tail -1
+}
+
+niri_installed_version() {
+  case "$1" in
+    niri)               [[ -x "$NIRI_BIN" ]] && "$NIRI_BIN" --version 2>/dev/null | awk '{print $2}' ;;
+    waybar)             [[ -x /usr/local/bin/waybar ]] && /usr/local/bin/waybar --version 2>/dev/null | grep -oP 'v\K[0-9.]+' ;;
+    xwayland-satellite) [[ -x /usr/local/bin/xwayland-satellite && -f "$XWS_STAMP" ]] && cat "$XWS_STAMP" ;;
+  esac
+}
+
+# Clones tag $3 of GitHub repo $2 and builds it; $1 names the build log. The
+# tree lives under ~/.cache rather than /tmp, since niri's takes 2 GB, and is
+# deleted once installed. Runs the rest of the arguments in the checkout.
+build_github_tag() {
+  local name="$1" repo="$2" tag="$3"; shift 3
+  local cache="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles" src log
+  src="$cache/build/$name"; log="$cache/$name-build.log"
+  mkdir -p "$cache/build"; rm -rf "$src"
+  {
+    git clone -q --depth 1 --branch "$tag" "https://github.com/$repo.git" "$src" \
+      && cd "$src" && "$@"
+  } >"$log" 2>&1 || { tail -5 "$log" >&2; echo "full log: $log" >&2; return 1; }
+  rm -rf "$src"
+}
+
+# The install steps, run inside the checkout by build_github_tag.
+niri_build_install() {
+  "$HOME/.cargo/bin/cargo" build --release --locked \
+    && sudo install -m 755 target/release/niri resources/niri-session /usr/local/bin/ \
+    && sudo install -Dm 644 resources/niri.desktop -t /usr/local/share/wayland-sessions/ \
+    && sudo install -Dm 644 resources/niri-portals.conf -t /usr/local/share/xdg-desktop-portal/ \
+    && sudo install -Dm 644 resources/niri.service resources/niri-shutdown.target -t /etc/systemd/user/ \
+    && sudo sed -i "s|/usr/bin/niri|$NIRI_BIN|" /etc/systemd/user/niri.service
+}
+
+xws_build_install() {
+  local version="$1"
+  "$HOME/.cargo/bin/cargo" build --release --locked \
+    && sudo install -m 755 target/release/xwayland-satellite /usr/local/bin/ \
+    && sudo install -Dm 644 /dev/null "$XWS_STAMP" \
+    && printf '%s\n' "$version" | sudo tee "$XWS_STAMP" >/dev/null
+}
+
+# gtk-layer-shell and spdlog are newer than 24.04 has, so meson builds them as
+# subprojects; static, so nothing beyond the waybar binary lands in /usr/local.
+waybar_build_install() {
+  meson setup build --prefix=/usr/local --buildtype=release -Ddefault_library=static \
+      -Dman-pages=disabled -Dtests=disabled \
+    && ninja -C build \
+    && sudo install -m 755 build/waybar /usr/local/bin/
+}
+
+# Builds one of the three when it is missing or off its pin. $1 is the versions
+# file key, $2 the GitHub repo, $3 the tag prefix ("v" or nothing), $4 the step.
+install_niri_component() {
+  local key="$1" repo="$2" prefix="$3" step="$4" pin want have
+  pin=$(tool_pin "$key")
+  if [[ -n "$pin" ]]; then
+    want="$pin"
+  else
+    run_spin_capture "checking latest $key..." want github_latest_tag "$repo"
+    [[ -n "$want" ]] || { log_error "$key" "could not resolve the latest release — network down?"; return 1; }
+  fi
+  have=$(niri_installed_version "$key")
+  needs_install "$key" "$have" "$want" "$pin" || return 0
+  run_spin "building $key $want (a few minutes)..." build_github_tag "$key" "$repo" "$prefix$want" "$step" "$want" \
+    && log_ok "$key $want installed in /usr/local/bin" \
+    || { log_error "$key" "build failed"; return 1; }
+}
+
+# Newest stable version of crate $1 on crates.io (its API wants a User-Agent).
+crates_latest() {
+  curl -fsSL -A "dotfiles-install" "https://crates.io/api/v1/crates/$1" 2>/dev/null \
+    | grep -oP '"max_stable_version":"\K[0-9.]+'
+}
+
+# bluetui, the Bluetooth manager Waybar opens in kitty, from crates.io: it isn't
+# packaged for Ubuntu. Built in a scratch root so cargo's install records don't
+# land in ~/.local, then just the binary is copied to ~/.local/bin.
+install_bluetui() {
+  local latest have root="$SCRIPT_TMPDIR/bluetui"
+  have=$(command_exists bluetui && bluetui --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+')
+  run_spin_capture "checking latest bluetui..." latest crates_latest bluetui
+  if [[ -z "$latest" ]]; then
+    [[ -n "$have" ]] && { log_skip "bluetui $have (could not check latest)"; return; }
+    log_error "bluetui" "could not resolve the latest release — network down?"; return 1
+  fi
+  needs_install "bluetui" "$have" "$latest" "" || return 0
+  run_spin "building bluetui $latest..." "$HOME/.cargo/bin/cargo" install --locked --root "$root" "bluetui@$latest" \
+    && install -Dm 755 "$root/bin/bluetui" "$HOME/.local/bin/bluetui" \
+    && log_ok "bluetui $latest installed in ~/.local/bin" \
+    || { log_error "bluetui" "build failed"; return 1; }
+}
+
+# The keyboard layout is per machine, so it goes in the untracked local.kdl the
+# config includes, copied from GNOME's first input source. Never overwritten.
+write_niri_local() {
+  local local_kdl="$HOME/.config/niri/local.kdl" layout variant src
+  [[ -f "$local_kdl" ]] && { log_skip ".config/niri/local.kdl (machine-local, kept)"; return; }
+  src=$(gsettings get org.gnome.desktop.input-sources sources 2>/dev/null | grep -oP "\('xkb', '\K[^']+" | head -1)
+  layout="${src%%+*}"; variant=""; [[ "$src" == *+* ]] && variant="${src#*+}"
+  local variant_line=""
+  [[ -n "$variant" ]] && variant_line=$'\n'"            variant \"$variant\""
+  mkdir -p "${local_kdl%/*}"
+  cat > "$local_kdl" <<EOF
+// This machine's niri settings, included by ~/.config/niri/config.kdl and not
+// tracked by the dotfiles repo. The layout was copied from GNOME's.
+input {
+    keyboard {
+        xkb {
+            layout "${layout:-us}"${variant_line}
+        }
+    }
+}
+
+// Monitors: \`niri msg outputs\` lists them. For example:
+// output "eDP-1" {
+//     scale 1
+//     position x=0 y=0
+// }
+EOF
+  log_ok ".config/niri/local.kdl (keyboard layout ${layout:-us}${variant:+ $variant})"
+}
+
+# VS Code picks its secret store by recognising the desktop, and doesn't know
+# niri: it then offers "weaker encryption", which would stick in GNOME too.
+# Naming the store outright means the same gnome-keyring in both sessions.
+# argv.json is VS Code's per-machine file (with comments), so this edits it in
+# place, and only when it exists and names no store yet.
+vscode_use_keyring() {
+  local argv="$HOME/.vscode/argv.json"
+  [[ -f "$argv" ]] || return 0
+  grep -q '"password-store"' "$argv" && { log_skip "VS Code password store (already set)"; return; }
+  sed -i '0,/{/s//{\n\t"password-store": "gnome-libsecret",/' "$argv" \
+    && log_ok "VS Code password store → gnome-keyring (~/.vscode/argv.json)" \
+    || log_error "VS Code" "could not edit ~/.vscode/argv.json"
+}
+
+install_niri_desktop() {
+  local missing=() dep
+  for dep in "${NIRI_BUILD_DEPS[@]}" "${WAYBAR_BUILD_DEPS[@]}" "${NIRI_SESSION_PKGS[@]}"; do
+    pkg_installed "$dep" || missing+=("$dep")
+  done
+  if (( ${#missing[@]} )); then
+    run_spin "installing ${#missing[@]} apt packages..." apt_get install -y "${missing[@]}" \
+      && log_ok "apt: ${missing[*]}" \
+      || { log_error "niri" "apt install failed: ${missing[*]}"; return 1; }
+  else
+    log_skip "build dependencies and session tools (apt)"
+  fi
+  [[ -x "$HOME/.cargo/bin/cargo" ]] || install_rust
+  command_exists meson || install_uv_tool meson "Meson"
+
+  install_niri_component niri niri-wm/niri v niri_build_install || return 1
+  install_niri_component xwayland-satellite Supreeeme/xwayland-satellite v xws_build_install
+  install_niri_component waybar Alexays/Waybar "" waybar_build_install
+  install_bluetui
+
+  local section_l src dst
+  for entry in "${NIRI_LINKS[@]}"; do
+    link_parts "$entry" section_l src dst
+    make_link "$src" "$dst"
+  done
+  write_niri_local
+  ensure_login_path
+  vscode_use_keyring
+}
+
+cmd_niri() {
+  echo
+  banner
+  section "niri desktop"
+  # sudo -n first: with a NOPASSWD rule, sudo -v can still insist on a password.
+  sudo -n true 2>/dev/null || sudo -v || { log_error "sudo" "authentication failed — cannot continue"; return 1; }
+  # The builds take longer than sudo's timestamp lasts.
+  ( while kill -0 "$$" 2>/dev/null; do sudo -n true; sleep 50; done ) &>/dev/null &
+  SUDO_KEEPALIVE_PID=$!
+  install_niri_desktop || return 1
+
+  # The theme files need niri on PATH to be linked, so apply the saved theme
+  # again now that it is.
+  local family="catppuccin" variant="mocha"
+  [[ -f "$HOME/.config/theme/current" ]] && read -r family variant < "$HOME/.config/theme/current"
+  section "Theme"
+  apply_theme "$family" "$variant"
+
+  echo
+  if (( FAIL_COUNT > 0 )); then
+    echo -e "\r\033[K  ${RED}${BOLD}Done with ${FAIL_COUNT} error(s).${RESET} ${SUBTEXT}See the ✗ lines above.${RESET}"
+  else
+    echo -e "\r\033[K  ${MAUVE}${BOLD}Done!${RESET} ${TEXT}Log out, pick niri from the gear on the login screen. Super+Shift+/ lists the keys.${RESET}"
+  fi
+  echo
+}
+
 # Prompts "<label> [<default>]: " and stores the reply, or the default when the
 # reply is empty, in the variable named by $3.
 ask_default() {
@@ -2560,6 +2805,19 @@ apply_theme() {
     "$DOTFILES/.config/p10k/${stub}.zsh:$HOME/.config/p10k/active.zsh:Powerlevel10k theme → ${label}"
     "$DOTFILES/.config/yazi/${stub}.toml:$HOME/.config/yazi/theme.toml:yazi theme → ${label}"
   )
+  # The niri session's own tools, only where --niri installed it.
+  if [[ -x "$NIRI_BIN" ]]; then
+    mkdir -p "$HOME/.config/niri" "$HOME/.config/waybar" "$HOME/.config/fuzzel" \
+      "$HOME/.config/mako" "$HOME/.config/swaylock"
+    pointers+=(
+      "$DOTFILES/.config/niri/${stub}.kdl:$HOME/.config/niri/theme.kdl:niri theme → ${label}"
+      "$DOTFILES/.config/waybar/${stub}.css:$HOME/.config/waybar/theme.css:Waybar theme → ${label}"
+      "$DOTFILES/.config/fuzzel/${stub}.ini:$HOME/.config/fuzzel/fuzzel.ini:fuzzel theme → ${label}"
+      "$DOTFILES/.config/mako/${stub}.conf:$HOME/.config/mako/config:mako theme → ${label}"
+      "$DOTFILES/.config/swaylock/${stub}.conf:$HOME/.config/swaylock/config:swaylock theme → ${label}"
+      "$DOTFILES/.config/niri/wallpapers/${stub}.svg:$HOME/.config/niri/wallpaper.svg:wallpaper → ${label}"
+    )
+  fi
 
   for entry in "${pointers[@]}"; do
     local target="${entry%%:*}" rest="${entry#*:}"
@@ -2599,6 +2857,17 @@ apply_theme() {
     || log_error "delta theme" "could not write ~/.config/delta/theme.gitconfig"
 
   command_exists bat && bat cache --build &>/dev/null
+
+  # niri reloads its own config; a running Waybar and mako need telling, and
+  # swaybg restarting on the new wallpaper (through niri, so it stays in the
+  # session rather than tied to this terminal).
+  pkill -USR2 -x waybar 2>/dev/null
+  command_exists makoctl && makoctl reload &>/dev/null
+  if [[ -n "$NIRI_SOCKET" ]] && pgrep -x swaybg >/dev/null; then
+    pkill -x swaybg
+    niri msg action spawn-sh -- 'exec swaybg -m fill -i ~/.config/niri/wallpaper.svg' &>/dev/null
+  fi
+  return 0
 }
 
 configure_theme() {
@@ -2983,6 +3252,19 @@ verify_ser2net() {
   echo "ser2net $v (gensio $(gensio_installed_version)) from source; unit installed"
 }
 
+# Only run where --niri installed it: the three source builds are present and
+# the config, with its theme and local includes, parses.
+verify_niri() {
+  local key v versions=""
+  for key in niri xwayland-satellite waybar; do
+    v=$(niri_installed_version "$key")
+    [[ -n "$v" ]] || { echo "$key missing (run --niri)"; return 1; }
+    versions+="$key $v, "
+  done
+  "$NIRI_BIN" validate &>/dev/null || { echo ".config/niri/config.kdl does not parse (niri validate)"; return 1; }
+  echo "${versions%, }; config valid"
+}
+
 # dpkg -C rather than `apt-get check` on purpose: it needs no sudo, and this
 # runs after the keepalive is dropped.
 verify_dpkg_state() {
@@ -3013,6 +3295,7 @@ verify_install() {
   vcheck "symlinks"          verify_symlinks
   vcheck "serial ports"      verify_serial_access
   vcheck "ser2net"           verify_ser2net
+  [[ -x "$NIRI_BIN" ]] && vcheck "niri desktop" verify_niri
   vcheck "shell lint"        verify_shell_lint
   vcheck "dpkg state"        verify_dpkg_state
 
@@ -3094,6 +3377,12 @@ cmd_setup() {
   install_serial_access
   install_ser2net
 
+  # Opt-in (--niri); once installed, kept at the versions file's pins.
+  if [[ -x "$NIRI_BIN" ]]; then
+    section "niri desktop"
+    install_niri_desktop
+  fi
+
   # Nothing past this point needs sudo — stop refreshing the credential so the
   # background loop can't contend with the interactive [y/N] prompts below for
   # the controlling terminal.
@@ -3110,6 +3399,7 @@ cmd_setup() {
   done
   merge_claude_settings
   fix_ssh_modes
+  ensure_login_path
 
   configure_theme
   configure_identity
@@ -3186,6 +3476,7 @@ cmd_link() {
   done
   merge_claude_settings
   fix_ssh_modes
+  ensure_login_path
 
   configure_theme
 
@@ -3200,7 +3491,7 @@ cmd_clean() {
 
   section "Removing symlinks"
   local section_l src dst
-  for entry in "${LINKS[@]}"; do
+  for entry in "${LINKS[@]}" "${NIRI_LINKS[@]}"; do
     link_parts "$entry" section_l src dst
     remove_link "$src" "$dst"
   done
@@ -3215,6 +3506,13 @@ cmd_clean() {
     "$HOME/.config/zsh-syntax-highlighting/active.zsh:$DOTFILES/.config/zsh-syntax-highlighting/"
     "$HOME/.config/lazygit/active-theme.yml:$DOTFILES/.config/lazygit/"
     "$HOME/.config/p10k/active.zsh:$DOTFILES/.config/p10k/"
+    "$HOME/.config/yazi/theme.toml:$DOTFILES/.config/yazi/"
+    "$HOME/.config/niri/theme.kdl:$DOTFILES/.config/niri/"
+    "$HOME/.config/waybar/theme.css:$DOTFILES/.config/waybar/"
+    "$HOME/.config/fuzzel/fuzzel.ini:$DOTFILES/.config/fuzzel/"
+    "$HOME/.config/mako/config:$DOTFILES/.config/mako/"
+    "$HOME/.config/swaylock/config:$DOTFILES/.config/swaylock/"
+    "$HOME/.config/niri/wallpaper.svg:$DOTFILES/.config/niri/wallpapers/"
   )
   for entry in "${pointers[@]}"; do
     local link="${entry%%:*}" prefix="${entry#*:}"
@@ -3355,10 +3653,11 @@ usage() {
   echo -e "    ${GREEN}./install.sh --identity${RESET}    ${SUBTEXT}Set your git name and email, pick the personal or work profile, nothing else${RESET}"
   echo -e "    ${GREEN}./install.sh --llvm${RESET}        ${SUBTEXT}Show the LLVM pin, the active version and what's on disk${RESET}"
   echo -e "    ${GREEN}./install.sh --ser2net${RESET}     ${SUBTEXT}Build the newest ser2net and gensio from source, for ports share, nothing else${RESET}"
+  echo -e "    ${GREEN}./install.sh --niri${RESET}        ${SUBTEXT}Add the niri tiling session to the login screen (builds niri, xwayland-satellite, Waybar)${RESET}"
   echo -e "    ${GREEN}./install.sh -h, --help${RESET}    ${SUBTEXT}Show this help message${RESET}"
   echo
   echo -e "  ${TEXT}${BOLD}Tool versions:${RESET}"
-  echo -e "    ${SUBTEXT}LLVM, the clang compiler, the Arm toolchain, CMake, Ninja and Ruff are installed at the versions${RESET}"
+  echo -e "    ${SUBTEXT}LLVM, the clang compiler, the Arm toolchain, CMake, Ninja, Ruff and the niri desktop are installed at the versions${RESET}"
   echo -e "    ${SUBTEXT}in the repo's versions file, and Powerlevel10k and the zsh plugins at the commits it pins.${RESET}"
   echo -e "    ${SUBTEXT}Override one per machine in ~/.config/dotfiles/versions.${RESET}"
   echo
@@ -3426,7 +3725,7 @@ usage() {
   echo -e "      ${SUBTEXT}ser2net              ${TEXT}newest ser2net + gensio built from source into /usr/local, for ports share${RESET}"
   echo -e "    ${TEXT}${BOLD}Configuration${RESET}"
   echo -e "      ${SUBTEXT}Dotfile symlinks${RESET}"
-  echo -e "      ${SUBTEXT}Theme                ${TEXT}pick Catppuccin (frappe/macchiato/mocha), Gruvbox Dark, or Dracula — kitty + bat + nvim + fzf + eza + tab bar + btop + zsh-syntax-highlighting + lazygit + delta + Powerlevel10k + yazi${RESET}"
+  echo -e "      ${SUBTEXT}Theme                ${TEXT}pick Catppuccin (frappe/macchiato/mocha), Gruvbox Dark, or Dracula — kitty + bat + nvim + fzf + eza + tab bar + btop + zsh-syntax-highlighting + lazygit + delta + Powerlevel10k + yazi, and the niri session's bar, launcher, notifications and lock screen${RESET}"
   echo -e "      ${SUBTEXT}Default terminal     ${TEXT}Kitty via gsettings${RESET}"
   echo -e "      ${SUBTEXT}Default shell        ${TEXT}Zsh via chsh${RESET}"
   echo -e "      ${SUBTEXT}Verification         ${TEXT}compiles/runs C + C++, cross-compiles for bare-metal Arm, drives clangd, builds with cmake+ninja${RESET}"
@@ -3451,6 +3750,7 @@ case "${1}" in
   --identity)    cmd_identity ;;
   --llvm)        cmd_llvm "${2:-}" ;;
   --ser2net)     cmd_ser2net ;;
+  --niri)        cmd_niri ;;
   -h | --help)   usage ;;
   *)
     echo -e "\n  ${RED}Unknown option:${RESET} $1"

@@ -1,0 +1,350 @@
+// niri: the scrollable-tiling Wayland compositor that ./install.sh --niri builds.
+// Each window opens as a full-height column on a strip that scrolls sideways;
+// opening one never resizes the others. Super+Shift+/ lists every binding.
+// The config reloads as soon as it's saved; `niri validate` checks it.
+// Docs: https://niri-wm.github.io/niri/
+
+input {
+    keyboard {
+        numlock
+    }
+    touchpad {
+        tap
+        natural-scroll
+        dwt
+    }
+    // Focus follows the pointer, but never scrolls the strip to do it.
+    focus-follows-mouse max-scroll-amount="0%"
+    warp-mouse-to-focus
+}
+
+// Ubuntu's cursor, as in GNOME (the default theme lacks some shapes apps ask
+// for), hidden while typing.
+cursor {
+    xcursor-theme "Yaru"
+    xcursor-size 24
+    hide-when-typing
+}
+
+layout {
+    gaps 8
+    center-focused-column "never"
+    preset-column-widths {
+        proportion 0.33333
+        proportion 0.5
+        proportion 0.66667
+    }
+    default-column-width { proportion 0.5; }
+    // A workspace's only window sits in the middle rather than at the left edge.
+    always-center-single-column
+
+    // Colours for both come from the theme include at the bottom.
+    focus-ring {
+        width 2
+    }
+    border {
+        off
+    }
+    shadow {
+        on
+        softness 30
+        spread 4
+        offset x=0 y=4
+    }
+}
+
+// Apps draw no title bars of their own; the focus ring marks the active one.
+prefer-no-csd
+
+environment {
+    // nmtui (Waybar's network click) in the terminal's own colours, which the
+    // theme picker sets, instead of newt's fixed blue and red.
+    NEWT_COLORS "root=default,default;border=blue,default;window=default,default;shadow=default,default;title=brightblue,default;button=black,blue;actbutton=black,magenta;compactbutton=lightgray,default;checkbox=lightgray,default;actcheckbox=black,blue;entry=white,black;disentry=gray,default;label=default,default;listbox=default,default;actlistbox=black,blue;sellistbox=blue,default;actsellistbox=black,blue;textbox=default,default;acttextbox=black,blue;helpline=default,default;roottext=default,default;emptyscale=,black;fullscale=,blue"
+}
+
+hotkey-overlay {
+    skip-at-startup
+}
+
+// A little faster than niri's defaults, and the moves end with a slight
+// spring. damping-ratio under 1.0 overshoots a touch; 1.0 just settles.
+animations {
+    workspace-switch {
+        spring damping-ratio=1.0 stiffness=1200 epsilon=0.0001
+    }
+    horizontal-view-movement {
+        spring damping-ratio=0.88 stiffness=1100 epsilon=0.0001
+    }
+    window-movement {
+        spring damping-ratio=0.88 stiffness=1100 epsilon=0.0001
+    }
+    window-resize {
+        spring damping-ratio=0.92 stiffness=1100 epsilon=0.0001
+    }
+    window-open {
+        duration-ms 180
+        curve "ease-out-expo"
+    }
+    window-close {
+        duration-ms 120
+        curve "ease-out-quad"
+    }
+    overview-open-close {
+        spring damping-ratio=0.9 stiffness=1000 epsilon=0.0001
+    }
+}
+
+screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
+
+// The session's helpers. X11 apps need nothing here: niri starts
+// xwayland-satellite on its own when the first one connects.
+// Waybar's output goes to a log, so a crash leaves its reason behind.
+spawn-sh-at-startup "mkdir -p ~/.cache/waybar; exec waybar > ~/.cache/waybar/waybar.log 2>&1"
+spawn-at-startup "mako"
+spawn-at-startup "/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1"
+// A notification whenever a USB serial adapter is plugged in or out.
+spawn-at-startup "ports" "--notify"
+// Clipboard history for Super+Shift+C: text and images, as they're copied.
+spawn-at-startup "wl-paste" "--watch" "cliphist" "store"
+// Night light: warmer colours from 20:00 until 06:00, fading over an hour.
+spawn-at-startup "wlsunset" "-s" "20:00" "-S" "06:00" "-t" "4000"
+// The theme's wallpaper (wallpapers/{variant}.svg, linked by the theme picker,
+// which also restarts swaybg on a switch). Blur behind kitty shows it.
+spawn-sh-at-startup "exec swaybg -m fill -i ~/.config/niri/wallpaper.svg"
+// Lock after 10 minutes idle, screens off after 15, and lock before suspend.
+// swaylock shows the theme's wallpaper behind its password ring.
+spawn-sh-at-startup "exec swayidle -w timeout 600 'swaylock -f -i ~/.config/niri/wallpaper.svg' timeout 900 'niri msg action power-off-monitors' before-sleep 'swaylock -f -i ~/.config/niri/wallpaper.svg'"
+
+window-rule {
+    geometry-corner-radius 8
+    clip-to-geometry true
+}
+
+// Windows you're not in fade slightly, so the one you are in stands out.
+window-rule {
+    match is-focused=false
+    opacity 0.92
+}
+
+// kitty's background is 95% opaque; blur what shows through it, like
+// blur-my-shell does under GNOME.
+window-rule {
+    match app-id="^kitty$"
+    background-effect {
+        blur true
+    }
+}
+
+layer-rule {
+    match namespace="^launcher$"
+    background-effect {
+        blur true
+    }
+}
+
+window-rule {
+    match app-id=r#"firefox$"# title="^Picture-in-Picture$"
+    open-floating true
+}
+
+// Browsers open at two thirds of the screen; the rest leaves room for a terminal.
+window-rule {
+    match app-id=r#"(?i)firefox|google-chrome|chromium"#
+    default-column-width { proportion 0.66667; }
+}
+
+// Chat and mail open on workspace 1 (see the workspace below).
+window-rule {
+    match app-id=r#"(?i)slack|thunderbird|teams"#
+    open-on-workspace "1"
+}
+
+// Small tools float instead of taking a whole column.
+window-rule {
+    match app-id=r#"^org\.gnome\.(Calculator|Settings|Calendar)$"#
+    match app-id="^nm-connection-editor$"
+    open-floating true
+}
+
+// The terminal tools Waybar opens: Wi-Fi, sound and Bluetooth, each in a
+// floating kitty of the same size.
+window-rule {
+    match app-id="^kitty$" title="^(nmtui|pulsemixer|bluetui)$"
+    open-floating true
+    default-column-width { fixed 900; }
+    default-window-height { fixed 560; }
+}
+
+// A rule can only send windows to a named workspace. Named workspaces always
+// exist and come first on their monitor, so naming this one "1" keeps the
+// numbering seamless: it is Super+1, and the unnamed ones follow as 2, 3, ...
+workspace "1"
+
+// Super is the modifier for everything here, so none of these clash with
+// kitty's Alt bindings for moving between its splits.
+binds {
+    Mod+Shift+Slash { show-hotkey-overlay; }
+
+    Mod+T hotkey-overlay-title="Open a terminal: kitty" { spawn "kitty"; }
+    Mod+Return hotkey-overlay-title=null { spawn "kitty"; }
+    Mod+D hotkey-overlay-title="Run an application: fuzzel" { spawn "fuzzel"; }
+    Mod+E hotkey-overlay-title="Browse files: yazi" { spawn "kitty" "--title" "yazi" "-e" "yazi"; }
+    Super+Alt+L hotkey-overlay-title="Lock the screen: swaylock" { spawn-sh "swaylock -i ~/.config/niri/wallpaper.svg"; }
+    Ctrl+Alt+Delete hotkey-overlay-title="Power menu" { spawn "power-menu"; }
+    Mod+N hotkey-overlay-title="Bring back the last notification" { spawn "makoctl" "restore"; }
+    Mod+Shift+N hotkey-overlay-title="Dismiss all notifications" { spawn "makoctl" "dismiss" "--all"; }
+    // Picking an entry copies it back to the clipboard; paste with Ctrl+V.
+    Mod+Shift+C hotkey-overlay-title="Clipboard history" { spawn-sh "cliphist list | fuzzel --dmenu | cliphist decode | wl-copy"; }
+    // GNOME's Settings app, for Wi-Fi, Bluetooth and sound. Its Displays page
+    // needs GNOME itself; monitors are set in local.kdl.
+    Mod+Comma hotkey-overlay-title="Settings" { spawn-sh "XDG_CURRENT_DESKTOP=GNOME gnome-control-center"; }
+
+    XF86AudioRaiseVolume  allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.05+ -l 1.0"; }
+    XF86AudioLowerVolume  allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.05-"; }
+    XF86AudioMute         allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"; }
+    XF86AudioMicMute      allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"; }
+    XF86AudioPlay         allow-when-locked=true { spawn "playerctl" "play-pause"; }
+    XF86AudioPrev         allow-when-locked=true { spawn "playerctl" "previous"; }
+    XF86AudioNext         allow-when-locked=true { spawn "playerctl" "next"; }
+    XF86MonBrightnessUp   allow-when-locked=true { spawn "brightnessctl" "--class=backlight" "set" "+10%"; }
+    XF86MonBrightnessDown allow-when-locked=true { spawn "brightnessctl" "--class=backlight" "set" "10%-"; }
+
+    Mod+O repeat=false { toggle-overview; }
+    Mod+Q repeat=false { close-window; }
+    // Every window on this workspace; once it's empty, the workspace goes too.
+    // Apps get the usual close request, so an editor can still ask to save.
+    Mod+Shift+Q repeat=false hotkey-overlay-title="Close every window on this workspace" { spawn-sh r#"ws=$(niri msg -j workspaces | jq '.[] | select(.is_focused) | .id'); niri msg -j windows | jq --argjson ws "$ws" '.[] | select(.workspace_id == $ws) | .id' | xargs -r -n1 niri msg action close-window --id"#; }
+
+    // Focus and move: arrows or HJKL. Ctrl moves the window, Shift the monitor.
+    Mod+Left  { focus-column-left; }
+    Mod+Down  { focus-window-down; }
+    Mod+Up    { focus-window-up; }
+    Mod+Right { focus-column-right; }
+    Mod+H     { focus-column-left; }
+    Mod+J     { focus-window-down; }
+    Mod+K     { focus-window-up; }
+    Mod+L     { focus-column-right; }
+
+    Mod+Ctrl+Left  { move-column-left; }
+    Mod+Ctrl+Down  { move-window-down; }
+    Mod+Ctrl+Up    { move-window-up; }
+    Mod+Ctrl+Right { move-column-right; }
+    Mod+Ctrl+H     { move-column-left; }
+    Mod+Ctrl+J     { move-window-down; }
+    Mod+Ctrl+K     { move-window-up; }
+    Mod+Ctrl+L     { move-column-right; }
+
+    Mod+Home      { focus-column-first; }
+    Mod+End       { focus-column-last; }
+    Mod+Ctrl+Home { move-column-to-first; }
+    Mod+Ctrl+End  { move-column-to-last; }
+
+    Mod+Shift+Left  { focus-monitor-left; }
+    Mod+Shift+Down  { focus-monitor-down; }
+    Mod+Shift+Up    { focus-monitor-up; }
+    Mod+Shift+Right { focus-monitor-right; }
+    Mod+Shift+H     { focus-monitor-left; }
+    Mod+Shift+J     { focus-monitor-down; }
+    Mod+Shift+K     { focus-monitor-up; }
+    Mod+Shift+L     { focus-monitor-right; }
+
+    Mod+Shift+Ctrl+Left  { move-column-to-monitor-left; }
+    Mod+Shift+Ctrl+Down  { move-column-to-monitor-down; }
+    Mod+Shift+Ctrl+Up    { move-column-to-monitor-up; }
+    Mod+Shift+Ctrl+Right { move-column-to-monitor-right; }
+    Mod+Shift+Ctrl+H     { move-column-to-monitor-left; }
+    Mod+Shift+Ctrl+J     { move-column-to-monitor-down; }
+    Mod+Shift+Ctrl+K     { move-column-to-monitor-up; }
+    Mod+Shift+Ctrl+L     { move-column-to-monitor-right; }
+
+    // Workspaces stack vertically on each monitor, one always empty at the end.
+    Mod+Page_Down      { focus-workspace-down; }
+    Mod+Page_Up        { focus-workspace-up; }
+    Mod+U              { focus-workspace-down; }
+    Mod+I              { focus-workspace-up; }
+    Mod+Ctrl+Page_Down { move-column-to-workspace-down; }
+    Mod+Ctrl+Page_Up   { move-column-to-workspace-up; }
+    Mod+Ctrl+U         { move-column-to-workspace-down; }
+    Mod+Ctrl+I         { move-column-to-workspace-up; }
+
+    Mod+WheelScrollDown cooldown-ms=150 { focus-workspace-down; }
+    Mod+WheelScrollUp   cooldown-ms=150 { focus-workspace-up; }
+    Mod+WheelScrollRight { focus-column-right; }
+    Mod+WheelScrollLeft  { focus-column-left; }
+    Mod+Shift+WheelScrollDown { focus-column-right; }
+    Mod+Shift+WheelScrollUp   { focus-column-left; }
+
+    Mod+1 { focus-workspace 1; }
+    Mod+2 { focus-workspace 2; }
+    Mod+3 { focus-workspace 3; }
+    Mod+4 { focus-workspace 4; }
+    Mod+5 { focus-workspace 5; }
+    Mod+6 { focus-workspace 6; }
+    Mod+7 { focus-workspace 7; }
+    Mod+8 { focus-workspace 8; }
+    Mod+9 { focus-workspace 9; }
+    Mod+Ctrl+1 { move-column-to-workspace 1; }
+    Mod+Ctrl+2 { move-column-to-workspace 2; }
+    Mod+Ctrl+3 { move-column-to-workspace 3; }
+    Mod+Ctrl+4 { move-column-to-workspace 4; }
+    Mod+Ctrl+5 { move-column-to-workspace 5; }
+    Mod+Ctrl+6 { move-column-to-workspace 6; }
+    Mod+Ctrl+7 { move-column-to-workspace 7; }
+    Mod+Ctrl+8 { move-column-to-workspace 8; }
+    Mod+Ctrl+9 { move-column-to-workspace 9; }
+
+    // Stack windows inside a column, or pull one back out into its own.
+    Mod+BracketLeft  { consume-or-expel-window-left; }
+    Mod+BracketRight { consume-or-expel-window-right; }
+
+    // Sizes: R cycles a third, a half and two thirds of the screen.
+    Mod+R       { switch-preset-column-width; }
+    Mod+Shift+R { switch-preset-column-width-back; }
+    Mod+Ctrl+R  { reset-window-height; }
+    Mod+F       { maximize-column; }
+    Mod+Shift+F { fullscreen-window; }
+    // Hide or show Waybar; windows take the space while it's hidden.
+    Mod+B hotkey-overlay-title="Hide or show the bar" { spawn "pkill" "-USR1" "-x" "waybar"; }
+    Mod+Ctrl+F  { expand-column-to-available-width; }
+    Mod+C       { center-column; }
+    Mod+Minus       { set-column-width "-10%"; }
+    Mod+Equal       { set-column-width "+10%"; }
+    Mod+Shift+Minus { set-window-height "-10%"; }
+    Mod+Shift+Equal { set-window-height "+10%"; }
+
+    Mod+V       { toggle-window-floating; }
+    Mod+Shift+V { switch-focus-between-floating-and-tiling; }
+    // Tabbed column: its windows share the full height, one shown at a time.
+    Mod+W { toggle-column-tabbed-display; }
+
+    Print      { screenshot; }
+    Ctrl+Print { screenshot-screen; }
+    Alt+Print  { screenshot-window; }
+
+    // For a VM or remote desktop that should get Super itself.
+    Mod+Escape allow-inhibiting=false { toggle-keyboard-shortcuts-inhibit; }
+
+    Mod+Shift+E { quit; }
+    Mod+Shift+P { power-off-monitors; }
+}
+
+// Two workarounds for apps niri treats strictly by default. niri calls these
+// debug options: they may change between releases.
+debug {
+    // Clicking Slack's (or Discord's, Telegram's) tray icon or notification
+    // brings its window forward. Those apps ask for focus with a request niri
+    // otherwise drops, to stop windows from stealing focus.
+    honor-xdg-activation-with-invalid-serial
+    // Electron apps (Slack, Teams, VS Code) treat "activated" as "being looked
+    // at" and hold back notifications; only the focused window keeps it.
+    deactivate-unfocused-windows
+}
+
+// The theme picker (./install.sh --theme) links this to the {variant}.kdl file
+// beside this one.
+include "~/.config/niri/theme.kdl"
+
+// This machine's own settings, untracked: keyboard layout and monitor
+// positions. ./install.sh --niri writes the layout GNOME uses; `niri msg
+// outputs` lists the monitors to add an output block for.
+include optional=true "~/.config/niri/local.kdl"

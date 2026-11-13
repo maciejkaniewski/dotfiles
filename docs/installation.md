@@ -17,6 +17,7 @@ cd ~/dotfiles
 | `-v`, `--verify` | Check the installed toolchain actually works |
 | `--theme` | Pick or re-apply the color theme and nothing else — the same step `--setup` ends with |
 | `--identity` | Set your git name and email, and pick the personal or work profile (`~/.zshrc.local`, `~/.ssh/config.local`), and nothing else |
+| `--niri` | Add the [niri](niri.md) tiling session to the login screen, beside GNOME: builds niri, xwayland-satellite and Waybar, installs the session's tools from apt, links its configs. Once installed, `--setup` keeps it at the pinned versions |
 | `--llvm [version]` | Show or change which LLVM/Clang version the toolchain runs on this machine — see [Choosing an LLVM version](toolchain.md#choosing-an-llvm-version) |
 | `-h`, `--help` | Show usage |
 
@@ -137,6 +138,8 @@ These files are **not** tracked in dotfiles — they are machine-specific and ge
 | `~/.gitconfig.local` | Git name and email for this machine (`--identity` writes them; other keys you add, such as a signing key, are kept) |
 | `~/.zshrc.local` | Shell overrides for this machine (copied from a profile template) |
 | `~/.ssh/config.local` | SSH hosts for this machine (copied from a profile template), read before the shared `~/.ssh/config` — see [SSH](ssh.md) |
+| `~/.zprofile` | Gets one marked line from `install.sh` that puts `~/.local/bin` and kitty on the PATH of the desktop session, which starts through a zsh login shell and never reads `~/.zshrc`. The rest of the file is yours |
+| `~/.config/niri/local.kdl` | niri settings for this machine: the keyboard layout (`--niri` copies GNOME's) and monitor positions — see [niri](niri.md#this-machines-settings) |
 | `~/.claude/settings.json` | Claude Code settings: your model, effort, theme, permissions. A plain file, **not** a symlink: `install.sh` overlays the repo's stable `.claude/settings.base.json` (env, hooks, status line, plugins) onto it, so changing the model or theme never dirties the repo. Repo keys win; to change a hook, edit the base file and re-run `./install.sh` |
 
 Never put `BW_SESSION` (the unlocked Bitwarden vault key) in either file — see [Bitwarden for git credentials](git.md#bitwarden-for-git-credentials).

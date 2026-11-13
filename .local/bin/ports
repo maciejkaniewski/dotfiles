@@ -28,6 +28,8 @@ usage() {
   cat <<'EOF'
 Usage: ports                         list USB serial ports, and those shared on the network
        ports -w                      list them, then print a line per plug and unplug (Ctrl-C stops)
+       ports --notify                a desktop notification per plug and unplug (the niri session runs it)
+       ports --waybar                Waybar's serial-port readout: a JSON line now and after each change
        ports share DEVICE [PORT]     share DEVICE on TCP PORT too, now and at boot, or move it to PORT
        ports unshare DEVICE|PORT     stop sharing that one; the others stay shared
        ports unshare [--all]         stop sharing all of them (bare: only when one is shared)
@@ -524,9 +526,122 @@ watch_ports() {
   done < <(stdbuf -oL udevadm monitor --udev --property --subsystem-match=tty)
 }
 
+# One notification line for the device described in $1: tty, alias, product.
+notify_line() {
+  local -a f
+  local alias product
+  IFS=$'\t' read -ra f <<<"$1"
+  alias=${f[7]//\/dev\//}
+  product=${f[1]//&/&amp;}; product=${product//</&lt;}; product=${product//>/&gt;}
+  printf '<b>%s</b>%s  %s' "${f[0]##*/}" "${alias:+  $alias}" "$product"
+}
+
+# Desktop notifications for plug and unplug, for a desktop session to run in
+# the background: the niri config starts it at login. The ttys of one
+# multi-channel adapter (FT2232: two, FT4232: four) arrive together, so events
+# are gathered until half a second passes without one, then sent as one
+# notification per kind. A second instance in the same session exits at once.
+notify_ports() {
+  command -v notify-send >/dev/null || { echo "notify-send is missing (apt install libnotify-bin)" >&2; exit 1; }
+  exec 9>"${XDG_RUNTIME_DIR:-/tmp}/ports-notify.lock"
+  flock -n 9 || exit 0
+
+  local -A seen
+  local -a added=() removed=()
+  local dev line k v rc
+
+  send() {
+    local title=$1; shift
+    (( $# > 1 )) && title=${title/port/ports}
+    notify-send -a ports -i drive-removable-media-usb "$title" "$(printf '%s\n' "$@")"
+  }
+
+  while IFS= read -r dev; do
+    load_props "$dev"
+    seen[$dev]=$(describe)
+  done < <(usb_ttys)
+
+  P=()
+  while :; do
+    if (( ${#added[@]} + ${#removed[@]} )); then
+      IFS= read -r -t 0.5 line; rc=$?
+      if (( rc > 128 )); then
+        (( ${#added[@]} ))   && send "Serial port connected" "${added[@]}"
+        (( ${#removed[@]} )) && send "Serial port disconnected" "${removed[@]}"
+        added=() removed=()
+        continue
+      fi
+      (( rc == 0 )) || break
+    else
+      IFS= read -r line || break
+    fi
+    if [[ -n "$line" ]]; then
+      [[ "$line" == *=* ]] && { k=${line%%=*} v=${line#*=}; P[$k]=$v; }
+      continue
+    fi
+    if [[ -n ${P[DEVNAME]} && ${P[DEVPATH]} == */usb* ]]; then
+      dev=${P[DEVNAME]}
+      case ${P[ACTION]} in
+        add)
+          seen[$dev]=$(describe)
+          added+=("$(notify_line "${seen[$dev]}")")
+          ;;
+        remove)
+          [[ -n ${seen[$dev]} ]] && removed+=("$(notify_line "${seen[$dev]}")")
+          unset "seen[$dev]"
+          ;;
+      esac
+    fi
+    P=()
+  done < <(stdbuf -oL udevadm monitor --udev --property --subsystem-match=tty)
+}
+
+# Waybar's readout of the USB serial ports: one JSON line now, then a new one
+# after each burst of plug or unplug events, so Waybar polls nothing. The text
+# is a count, empty (which hides the module) when nothing is plugged in; the
+# tooltip lists each port as the notifications do.
+waybar_ports() {
+  local line dev count pending=false rc
+  local -a lines
+
+  emit() {
+    lines=()
+    while IFS= read -r dev; do
+      load_props "$dev"
+      lines+=("$(notify_line "$(describe)")")
+    done < <(usb_ttys)
+    count=${#lines[@]}
+    local tooltip text=""
+    (( count )) && text=" $count"
+    tooltip=$(printf '%s\n' "${lines[@]}"); tooltip=${tooltip%$'\n'}
+    tooltip=${tooltip//\\/\\\\}; tooltip=${tooltip//\"/\\\"}; tooltip=${tooltip//$'\n'/\\n}
+    printf '{"text": "%s", "tooltip": "%s", "class": "%s"}\n' "$text" "$tooltip" "$( (( count )) && echo present || echo none)"
+  }
+
+  emit
+  P=()
+  while :; do
+    if $pending; then
+      IFS= read -r -t 0.5 line; rc=$?
+      (( rc > 128 )) && { emit; pending=false; continue; }
+      (( rc == 0 )) || break
+    else
+      IFS= read -r line || break
+    fi
+    if [[ -n "$line" ]]; then
+      [[ "$line" == *=* ]] && { P[${line%%=*}]=${line#*=}; }
+      continue
+    fi
+    [[ ${P[DEVPATH]} == */usb* && ${P[ACTION]} =~ ^(add|remove)$ ]] && pending=true
+    P=()
+  done < <(stdbuf -oL udevadm monitor --udev --property --subsystem-match=tty)
+}
+
 case $1 in
   "")         list ;;
   -w|--watch) watch_ports ;;
+  --notify)   notify_ports ;;
+  --waybar)   waybar_ports ;;
   share)      share "$2" "$3" ;;
   unshare)    unshare "$2" ;;
   -h|--help)  usage ;;

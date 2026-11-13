@@ -1,0 +1,12 @@
+#!/bin/sh
+# power-menu: lock, suspend, log out, reboot or shut down, picked in fuzzel.
+# The niri session runs it on Ctrl+Alt+Delete and from Waybar's ⏻ button.
+choice=$(printf '%s\n' "󰌾  Lock" "󰤄  Suspend" "󰍃  Log out" "󰜉  Reboot" "󰐥  Shut down" \
+    | fuzzel --dmenu --lines 5 --width 18) || exit 0
+case "$choice" in
+    *Lock)        swaylock -f -i "$HOME/.config/niri/wallpaper.svg" ;;
+    *Suspend)     systemctl suspend ;;   # swayidle locks the screen first
+    *"Log out")   niri msg action quit --skip-confirmation ;;
+    *Reboot)      systemctl reboot ;;
+    *"Shut down") systemctl poweroff ;;
+esac

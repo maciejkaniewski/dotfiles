@@ -22,11 +22,24 @@ dotfiles/
 │   │   ├── kitty.conf
 │   │   ├── ssh.conf                   # kitten ssh: no shared connections to local-network machines
 │   │   └── tab_bar.py
+│   ├── fuzzel/
+│   │   └── {variant}.ini              # niri's launcher, one whole config per theme (fuzzel has no include)
 │   ├── lazygit/
 │   │   ├── config.yml
 │   │   └── {variant}.yml              # Catppuccin/Gruvbox/Dracula theme per variant, merged via LG_CONFIG_FILE
+│   ├── mako/
+│   │   └── {variant}.conf             # niri's notification daemon, one whole config per theme
+│   ├── niri/
+│   │   ├── config.kdl                 # the niri session: layout, startup programs, key bindings
+│   │   └── {variant}.kdl              # focus ring and overview colours; ~/.config/niri/theme.kdl links to one
 │   ├── p10k/
 │   │   └── {variant}.zsh              # Catppuccin/Gruvbox/Dracula Powerlevel10k colors per variant
+│   ├── swaylock/
+│   │   └── {variant}.conf             # niri's lock screen colours
+│   ├── waybar/
+│   │   ├── config.jsonc               # the niri session's bar: workspaces, window, system readouts
+│   │   ├── style.css
+│   │   └── {variant}.css              # colour definitions; ~/.config/waybar/theme.css links to one
 │   ├── yazi/
 │   │   ├── keymap.toml                # Enter goes into a directory (smart-enter)
 │   │   ├── {variant}.toml             # the flavor each theme uses; ~/.config/yazi/theme.toml links to one
@@ -76,7 +89,9 @@ dotfiles/
 ├── .local/
 │   └── bin/
 │       ├── git-credential-bw          # git credential helper — HTTPS logins from the Bitwarden vault
-│       └── ports                      # list / watch USB serial ports, share one on the network
+│       ├── ports                      # list / watch USB serial ports, share one on the network
+│       ├── power-menu                 # niri: lock / suspend / log out / reboot / shut down, in fuzzel
+│       └── waybar-calendar            # niri: Waybar's date and time, with a Monday-first calendar tooltip
 ├── .p10k.zsh
 ├── .ssh/
 │   ├── config                         # shared client settings, includes ~/.ssh/config.local first
@@ -96,5 +111,5 @@ dotfiles/
 ├── LICENSE                            # MIT
 ├── README.md                          # overview and quick start
 ├── install.sh
-└── versions                           # exact tool versions --setup installs
+└── versions                           # exact tool versions --setup and --niri install
 ```

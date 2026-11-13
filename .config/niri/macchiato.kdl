@@ -1,0 +1,15 @@
+// Catppuccin Macchiato for niri. The theme picker links ~/.config/niri/theme.kdl here.
+layout {
+    focus-ring {
+        active-color "#b7bdf8"
+        inactive-color "#6e738d"
+        urgent-color "#ed8796"
+    }
+    shadow {
+        color "#181926aa"
+    }
+}
+
+overview {
+    backdrop-color "#181926"
+}

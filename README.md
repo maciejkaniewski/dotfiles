@@ -28,6 +28,7 @@ A Linux development environment for embedded C/C++ and Python, set up by one scr
 | Search and files | [fzf](https://github.com/junegunn/fzf), [ripgrep](https://github.com/BurntSushi/ripgrep), [fd](https://github.com/sharkdp/fd), [bat](https://github.com/sharkdp/bat), [eza](https://github.com/eza-community/eza), [zoxide](https://github.com/ajeetdsouza/zoxide), [yazi](https://github.com/sxyazi/yazi) |
 | Build | LLVM/clang, Arm GNU Toolchain, CMake, Ninja, Meson, Rust, [just](https://github.com/casey/just) |
 | Python | [uv](https://docs.astral.sh/uv/), [Ruff](https://github.com/astral-sh/ruff), [basedpyright](https://github.com/DetachHead/basedpyright) |
+| Desktop | GNOME, or the [niri](https://github.com/niri-wm/niri) scrolling-tiling session with [Waybar](https://github.com/Alexays/Waybar), opt-in |
 | Fonts | [FiraCode Nerd Font](https://github.com/ryanoasis/nerd-fonts) (terminal and editors, with ligatures), [Maple Mono NL](https://github.com/subframe7536/maple-font) (cursive italics in kitty) |
 
 ## Quick start
@@ -47,6 +48,7 @@ Then log out and back in, so the session starts with zsh, and open kitty. Near t
 | `./install.sh -v` | Check that the installed toolchain works (no sudo) |
 | `./install.sh --theme` | Pick or re-apply the colour theme |
 | `./install.sh --identity` | Set your git name and email, and the personal or work profile |
+| `./install.sh --niri` | Add the niri tiling session to the login screen |
 | `./install.sh --llvm [version]` | Show or change the LLVM version |
 | `./install.sh -c` | Remove the config symlinks |
 
@@ -57,7 +59,8 @@ Then log out and back in, so the session starts with zsh, and open kitty. Near t
 | [Installation](docs/installation.md) | Every flag, everything `--setup` installs, the machine-local files |
 | [Build toolchain](docs/toolchain.md) | The pinned versions and how to switch LLVM |
 | [Neovim](docs/neovim.md) | Plugins, keymaps, snippets, editing alongside Claude Code, why Neovim is pinned |
-| [Kitty](docs/kitty.md) | Status bar, key bindings, sessions |
+| [niri](docs/niri.md) | The tiling session: key bindings, Waybar, themes, per-machine monitors |
+| [Kitty](docs/kitty.md) | Status bar, fonts, key bindings |
 | [Shell](docs/shell.md) | Zsh plugins, prompt, history, completion and helper functions |
 | [Git](docs/git.md) | Git defaults, lazygit, Bitwarden for HTTPS credentials |
 | [SSH](docs/ssh.md) | Per-profile hosts, host completion, kitty's ssh kitten |

@@ -1,0 +1,14 @@
+/* Catppuccin Frappé for Waybar. The theme picker links ~/.config/waybar/theme.css here.
+   The module colours are the ones kitty's tab bar uses for the same readouts. */
+@define-color bg      #303446;
+@define-color surface #414559;
+@define-color overlay #737994;
+@define-color fg      #c6d0f5;
+@define-color accent  #babbf1;
+@define-color cpu     #ef9f76;
+@define-color mem     #85c1dc;
+@define-color temp    #e78284;
+@define-color net     #ca9ee6;
+@define-color bat     #a6d189;
+@define-color date    #e5c890;
+@define-color time    #99d1db;

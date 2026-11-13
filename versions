@@ -21,3 +21,8 @@ zsh-syntax-highlighting=e6683f20e5c38d3e5447f45845d04ddda75d0f23
 fzf-tab=24105b15714bfec37989ed5c5b6e60f572253019
 fzf-git=57ef995e245923ae05721e876c42100a1896ad6c
 zsh-bat=467337613c1c220c0d01d69b19d2892935f43e9f
+
+# The niri desktop (./install.sh --niri), built from source at these releases.
+niri=26.04
+xwayland-satellite=0.8.3
+waybar=0.16.0

@@ -1,0 +1,15 @@
+// Catppuccin Frappé for niri. The theme picker links ~/.config/niri/theme.kdl here.
+layout {
+    focus-ring {
+        active-color "#babbf1"
+        inactive-color "#737994"
+        urgent-color "#e78284"
+    }
+    shadow {
+        color "#232634aa"
+    }
+}
+
+overview {
+    backdrop-color "#232634"
+}

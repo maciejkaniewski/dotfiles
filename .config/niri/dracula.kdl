@@ -1,0 +1,15 @@
+// Dracula for niri. The theme picker links ~/.config/niri/theme.kdl here.
+layout {
+    focus-ring {
+        active-color "#bd93f9"
+        inactive-color "#6272a4"
+        urgent-color "#ff5555"
+    }
+    shadow {
+        color "#21222caa"
+    }
+}
+
+overview {
+    backdrop-color "#21222c"
+}
