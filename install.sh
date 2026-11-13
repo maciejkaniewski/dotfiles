@@ -2468,7 +2468,7 @@ WAYBAR_BUILD_DEPS=(libgtkmm-3.0-dev libjsoncpp-dev libfmt-dev libspdlog-dev libg
 # wallpaper, the polkit password prompt, the media and brightness keys,
 # clipboard history, night light, and the sound mixer Waybar opens.
 NIRI_SESSION_PKGS=(xwayland fuzzel mako-notifier swaylock swayidle swaybg policykit-1-gnome
-  playerctl brightnessctl cliphist wl-clipboard wlsunset pulsemixer)
+  playerctl brightnessctl cliphist wl-clipboard wlsunset pulsemixer papirus-icon-theme)
 NIRI_LINKS=(
   "niri|$DOTFILES/.config/niri/config.kdl:$HOME/.config/niri/config.kdl"
   "niri|$DOTFILES/.config/waybar/config.jsonc:$HOME/.config/waybar/config.jsonc"
@@ -2857,6 +2857,22 @@ apply_theme() {
     || log_error "delta theme" "could not write ~/.config/delta/theme.gitconfig"
 
   command_exists bat && bat cache --build &>/dev/null
+
+  # GTK apps (Settings, Files, dialogs) in the Yaru accent closest to the
+  # theme, and Papirus icons where installed (--niri installs them). Both are
+  # GNOME-wide settings, so GNOME follows too.
+  if command_exists gsettings; then
+    local yaru=purple
+    [[ "$family" == gruvbox ]] && yaru=olive
+    if [[ -d "/usr/share/themes/Yaru-$yaru-dark" ]]; then
+      gsettings set org.gnome.desktop.interface gtk-theme "Yaru-$yaru-dark" \
+        && log_ok "${SUBTEXT}GTK theme → Yaru-$yaru-dark${RESET}"
+    fi
+    if [[ -d /usr/share/icons/Papirus-Dark ]]; then
+      gsettings set org.gnome.desktop.interface icon-theme Papirus-Dark \
+        && log_ok "${SUBTEXT}icon theme → Papirus-Dark${RESET}"
+    fi
+  fi
 
   # niri reloads its own config; a running Waybar and mako need telling, and
   # swaybg restarting on the new wallpaper (through niri, so it stays in the

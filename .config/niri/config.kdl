@@ -35,6 +35,9 @@ layout {
         proportion 0.66667
     }
     default-column-width { proportion 0.5; }
+    // Workspaces draw no fill of their own, so the wallpaper (which sits in
+    // the overview backdrop, see the wallpaper layer-rule) shows behind them.
+    background-color "transparent"
     // A workspace's only window sits in the middle rather than at the left edge.
     always-center-single-column
 
@@ -133,6 +136,13 @@ window-rule {
     background-effect {
         blur true
     }
+}
+
+// The wallpaper also fills the overview's backdrop (Super+O), behind the
+// zoomed-out workspaces, instead of a flat colour.
+layer-rule {
+    match namespace="^wallpaper$"
+    place-within-backdrop true
 }
 
 layer-rule {

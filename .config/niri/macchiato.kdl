@@ -1,7 +1,7 @@
 // Catppuccin Macchiato for niri. The theme picker links ~/.config/niri/theme.kdl here.
 layout {
     focus-ring {
-        active-color "#b7bdf8"
+        active-gradient from="#b7bdf8" to="#c6a0f6" angle=45 relative-to="workspace-view"
         inactive-color "#6e738d"
         urgent-color "#ed8796"
     }
@@ -12,4 +12,16 @@ layout {
 
 overview {
     backdrop-color "#181926"
+}
+
+// The focused window glows softly in the accent colour.
+window-rule {
+    match is-focused=true
+    shadow {
+        on
+        softness 40
+        spread 6
+        offset x=0 y=0
+        color "#b7bdf855"
+    }
 }

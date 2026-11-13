@@ -8,6 +8,8 @@ The status bar is adaptive — lower-priority segments (hostname, CPU frequency,
 
 Under [niri](niri.md), Waybar shows the system readouts, so the bar drops them and keeps only the host and IP: the one thing Waybar can't know, since it follows the active window into ssh sessions.
 
+**Tabs** — rounded ends (`tab_powerline_style round`), matching Waybar's rounded islands under niri.
+
 **Fonts** — FiraCode Nerd Font Mono with three of Fira's alternates: `ss08` keeps `==` as two signs, `ss02` draws `<=` `>=` as flat ≤ ≥, and `ss03` a plain `&`. Fira Code has no italics, so italic text (the comments of every colour scheme here) is Maple Mono NL's cursive. NL is the build without ligatures, so a comment never draws `==` or `<=` differently from the code beside it. Icons come from FiraCode Nerd Font's own glyphs.
 
 **Cursor and display** — `cursor_trail` animates the cursor's jumps in every program, Neovim included. kitty picks X11 or Wayland to match the session; under GNOME Wayland, the only session Ubuntu 26.04 has, its title bar takes the window's background colour.

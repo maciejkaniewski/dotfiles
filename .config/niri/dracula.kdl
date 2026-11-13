@@ -1,7 +1,7 @@
 // Dracula for niri. The theme picker links ~/.config/niri/theme.kdl here.
 layout {
     focus-ring {
-        active-color "#bd93f9"
+        active-gradient from="#bd93f9" to="#ff79c6" angle=45 relative-to="workspace-view"
         inactive-color "#6272a4"
         urgent-color "#ff5555"
     }
@@ -12,4 +12,16 @@ layout {
 
 overview {
     backdrop-color "#21222c"
+}
+
+// The focused window glows softly in the accent colour.
+window-rule {
+    match is-focused=true
+    shadow {
+        on
+        softness 40
+        spread 6
+        offset x=0 y=0
+        color "#bd93f955"
+    }
 }

@@ -85,7 +85,9 @@ The volume, brightness and media keys work as usual, also on the lock screen.
 
 ## Look
 
-- Windows you're not in fade slightly (92% opacity), so the focused one stands out on top of its focus ring.
+- The focused window has a gradient focus ring (the theme's accent into its second colour) and a soft glow in the accent colour. Windows you're not in fade slightly (92% opacity).
+- The wallpaper sits in the overview's backdrop, so in `Super+O` the workspaces float over it; workspaces themselves are transparent, so it shows behind windows as usual.
+- GTK apps use the Yaru accent closest to the theme (purple, or olive for Gruvbox) and Papirus icons. Both are GNOME-wide settings that `--theme` sets, so GNOME follows too.
 - Waybar sits on the bottom layer, so in the overview (`Super+O`) it zooms out with each workspace instead of staying full size on top. Tiled windows still leave its space free.
 - Animations run a little faster than niri's defaults, and window moves end with a slight spring (`animations` in `config.kdl`).
 

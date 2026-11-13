@@ -1,7 +1,7 @@
 // Catppuccin Mocha for niri. The theme picker links ~/.config/niri/theme.kdl here.
 layout {
     focus-ring {
-        active-color "#b4befe"
+        active-gradient from="#b4befe" to="#cba6f7" angle=45 relative-to="workspace-view"
         inactive-color "#6c7086"
         urgent-color "#f38ba8"
     }
@@ -12,4 +12,16 @@ layout {
 
 overview {
     backdrop-color "#11111b"
+}
+
+// The focused window glows softly in the accent colour.
+window-rule {
+    match is-focused=true
+    shadow {
+        on
+        softness 40
+        spread 6
+        offset x=0 y=0
+        color "#b4befe55"
+    }
 }
