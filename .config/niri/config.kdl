@@ -69,6 +69,21 @@ hotkey-overlay {
     skip-at-startup
 }
 
+// Alt+Tab (and Super+Tab) switches between recently used windows across every
+// workspace and screen, with previews; hold Alt and press Tab again to go
+// further back, ` instead of Tab for windows of the same app. In the
+// switcher, W, O and A narrow it to this workspace, this screen or all. The
+// highlight colours come from the theme file.
+recent-windows {
+    highlight {
+        corner-radius 14
+        padding 20
+    }
+    previews {
+        max-height 420
+    }
+}
+
 // A little faster than niri's defaults, and the moves end with a slight
 // spring. damping-ratio under 1.0 overshoots a touch; 1.0 just settles.
 animations {
@@ -115,9 +130,11 @@ spawn-at-startup "ports" "--notify"
 spawn-at-startup "wl-paste" "--watch" "cliphist" "store"
 // Night light: warmer colours from 20:00 until 06:00, fading over an hour.
 spawn-at-startup "wlsunset" "-s" "20:00" "-S" "06:00" "-t" "4000"
-// The theme's wallpaper (wallpapers/{variant}.svg, linked by the theme picker,
-// which also restarts swaybg on a switch). Blur behind kitty shows it.
-spawn-sh-at-startup "exec swaybg -m fill -i ~/.config/niri/wallpaper.svg"
+// The wallpaper: the theme's glow (wallpapers/{variant}.svg) or one of its
+// family's blurred community ones (Super+Alt+W, .local/bin/wallpaper). The
+// theme picker links it and restarts swaybg on a switch. Blur behind kitty
+// shows it.
+spawn-sh-at-startup "exec swaybg -m fill -i ~/.config/niri/wallpaper"
 // Lock after 10 minutes idle, screens off after 15, and lock before suspend.
 // .local/bin/lock-screen sets the lock screen's look in one place.
 spawn-sh-at-startup "exec swayidle -w timeout 600 lock-screen timeout 900 'niri msg action power-off-monitors' before-sleep lock-screen"
@@ -131,6 +148,22 @@ window-rule {
 window-rule {
     match is-focused=false
     opacity 0.92
+}
+
+// Floating windows (dialogs, nmtui, the calculator) cast a deeper shadow and
+// blur what's behind them, so they read as lifted above the tiles.
+window-rule {
+    match is-floating=true
+    shadow {
+        on
+        softness 60
+        spread 8
+        offset x=0 y=14
+        color "#000000a0"
+    }
+    background-effect {
+        blur true
+    }
 }
 
 // kitty's background is 95% opaque; blur what shows through it, like
@@ -214,6 +247,7 @@ binds {
     Mod+D hotkey-overlay-title="Run an application: fuzzel" { spawn "fuzzel"; }
     Mod+E hotkey-overlay-title="Browse files: yazi" { spawn "kitty" "--title" "yazi" "-e" "yazi"; }
     Super+Alt+L hotkey-overlay-title="Lock the screen" { spawn "lock-screen"; }
+    Super+Alt+W hotkey-overlay-title="Next wallpaper" { spawn "wallpaper"; }
     Ctrl+Alt+Delete hotkey-overlay-title="Power menu" { spawn "power-menu"; }
     Mod+N hotkey-overlay-title="Bring back the last notification" { spawn "makoctl" "restore"; }
     Mod+Shift+N hotkey-overlay-title="Dismiss all notifications" { spawn "makoctl" "dismiss" "--all"; }

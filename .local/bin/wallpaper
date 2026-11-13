@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# wallpaper: the niri session's wallpaper.
+#
+#   wallpaper           the next one for the current theme (Super+Alt+W)
+#   wallpaper prev      the previous one
+#   wallpaper --fetch   download and blur the community wallpapers listed in
+#                       .config/niri/wallpapers/sources (./install.sh --niri
+#                       runs this); ones already there are skipped
+#
+# A theme's wallpapers are its own glow, .config/niri/wallpapers/{variant}.svg,
+# then its family's community ones, blurred into soft fields of their colours
+# in ~/.local/share/wallpapers/{family}/ (catppuccin, gruvbox, dracula).
+# ~/.config/niri/wallpaper points at the one in use: swaybg draws it,
+# lock-screen shows it, and the theme picker keeps it when you switch between
+# variants of the same family.
+
+link="$HOME/.config/niri/wallpaper"
+repo_dir="$(cd "$(dirname "$(readlink -f "$0")")/../../.config/niri/wallpapers" && pwd)"
+store="${XDG_DATA_HOME:-$HOME/.local/share}/wallpapers"
+
+# Downloads each listed image and writes a blurred 2560×1440 JPEG of it:
+# shrunk, blurred, dimmed to about the glow wallpapers' brightness (bright
+# ones more), with a touch of grain so the gradients don't band.
+fetch() {
+    local family spec path name out url tmp ok=0 failed=0
+    tmp=$(mktemp -d) || return 1
+    while read -r family spec path; do
+        [[ -z $family || $family == \#* ]] && continue
+        name=${path##*/}; name=${name%.*}
+        out="$store/$family/$name.jpg"
+        [[ -s $out ]] && continue
+        url="https://raw.githubusercontent.com/${spec%@*}/${spec#*@}/${path// /%20}"
+        mkdir -p "$store/$family"
+        if curl -fsSL "$url" -o "$tmp/src" && python3 - "$tmp/src" "$out.tmp" <<'EOF' && mv "$out.tmp" "$out"; then
+import sys
+from PIL import Image, ImageFilter, ImageStat
+src, out = sys.argv[1], sys.argv[2]
+im = Image.open(src).convert("RGB")
+# Crop to 16:9 from the middle.
+if im.width / im.height > 16 / 9:
+    w = im.height * 16 // 9; x = (im.width - w) // 2; im = im.crop((x, 0, x + w, im.height))
+else:
+    h = im.width * 9 // 16; y = (im.height - h) // 2; im = im.crop((0, y, im.width, y + h))
+small = im.resize((320, 180), Image.LANCZOS).filter(ImageFilter.GaussianBlur(14))
+mean = ImageStat.Stat(small.convert("L")).mean[0] / 255
+scale = min(0.7, 0.17 / max(mean, 0.01))
+small = small.point(lambda v: int(v * scale))
+big = small.resize((2560, 1440), Image.BICUBIC)
+grain = Image.effect_noise((2560, 1440), 24).convert("RGB")
+Image.blend(big, grain, 0.025).save(out, "JPEG", quality=92)
+EOF
+            ok=$((ok + 1))
+        else
+            rm -f "$out.tmp"; failed=$((failed + 1))
+            echo "wallpaper: could not fetch $path" >&2
+        fi
+    done < "$repo_dir/sources"
+    rm -rf "$tmp"
+    echo "wallpaper: $ok fetched, $failed failed, in $store"
+    (( failed == 0 ))
+}
+
+if [[ $1 == --fetch ]]; then
+    fetch
+    exit
+fi
+
+# The theme in use, from the theme picker's ~/.config/theme/current.
+read -r family variant < "$HOME/.config/theme/current" 2>/dev/null
+case $family in
+    catppuccin) stub=$variant ;;
+    gruvbox)    stub="gruvbox-$variant" ;;
+    *)          stub=$family ;;
+esac
+
+choices=("$repo_dir/$stub.svg")
+for f in "$store/$family"/*.jpg; do
+    [[ -e $f ]] && choices+=("$f")
+done
+current=$(readlink "$link")
+i=0
+for j in "${!choices[@]}"; do
+    [[ ${choices[j]} == "$current" ]] && i=$j
+done
+step=1; [[ $1 == prev ]] && step=-1
+next=${choices[(i + step + ${#choices[@]}) % ${#choices[@]}]}
+
+ln -sfn "$next" "$link"
+# Through niri, so the new swaybg belongs to the session, not this shell. The
+# old one goes once the new one has drawn, so the screen never shows blank.
+old=$(pgrep -x swaybg)
+niri msg action spawn-sh -- 'exec swaybg -m fill -i ~/.config/niri/wallpaper' >/dev/null || exit 1
+sleep 0.5
+# shellcheck disable=SC2086  # one pid per line, split on purpose
+[[ -n $old ]] && kill $old
+# The lock screen's copy of an SVG wallpaper, so the next lock is instant.
+lock-screen --prepare &>/dev/null &

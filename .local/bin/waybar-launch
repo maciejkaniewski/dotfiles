@@ -43,16 +43,24 @@ start() {
     pkill -x waybar
     while pgrep -x waybar >/dev/null; do sleep 0.1; done
     mkdir -p "${log%/*}"
-    WAYBAR_MAIN=$(pick_main) waybar > "$log" 2>&1 &
+    # 9>&-: Waybar mustn't hold the lock, or a new watcher couldn't start
+    # while it runs.
+    WAYBAR_MAIN=$(pick_main) waybar 9>&- > "$log" 2>&1 &
 }
 trap start USR1
 
 start
 screens=""
 # niri reports docking and undocking as workspaces moving between screens.
+# Every 5 s without an event (or on --set-main's signal), check Waybar is
+# still there: one that quit, say on a reload that found its theme file
+# missing, comes back on its own.
 while :; do
-    IFS= read -r event; rc=$?
-    (( rc > 128 )) && continue   # interrupted by --set-main's signal
+    IFS= read -r -t 5 event; rc=$?
+    if (( rc > 128 )); then
+        pgrep -x waybar >/dev/null || start
+        continue
+    fi
     (( rc == 0 )) || break
     [[ $event == *WorkspacesChanged* ]] || continue
     now=$(jq -r '.WorkspacesChanged.workspaces | map(.output) | unique | join(",")' <<<"$event")
@@ -62,4 +70,4 @@ while :; do
     elif ! pgrep -x waybar >/dev/null; then
         start                    # Waybar died; bring it back
     fi
-done < <(niri msg -j event-stream)
+done < <(niri msg -j event-stream 9>&-)

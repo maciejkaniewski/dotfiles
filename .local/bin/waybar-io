@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# waybar-io: Waybar's disk readout (custom/io in .config/waybar/modules.jsonc).
+# The bar shows how full / is; the tooltip adds free space and the network's
+# current download and upload speed, so the bar itself stays short.
+#
+# Streams one JSON line every $IO_INTERVAL seconds (default 3). The network is
+# whichever interface holds the default route, so it follows Wi-Fi, a dock's
+# Ethernet or a phone's USB tethering as they come and go.
+
+interval=${IO_INTERVAL:-3}
+
+# Interface with the default route (destination 00000000), else nothing.
+default_iface() {
+    awk '$2 == "00000000" { print $1; exit }' /proc/net/route
+}
+
+# Received and sent byte counters of interface $1.
+counters() {
+    awk -v i="$1:" '$1 == i { print $2, $10 }' /proc/net/dev
+}
+
+# Bytes per second as "1.2 MB/s", "84 kB/s" or "0 B/s".
+rate() {
+    awk -v b="$1" 'BEGIN {
+        if (b >= 1e6) printf "%.1f MB/s", b / 1e6
+        else if (b >= 1e3) printf "%.0f kB/s", b / 1e3
+        else printf "%d B/s", b }'
+}
+
+gb() { awk -v b="$1" 'BEGIN { printf "%.0f GB", b / 1e9 }'; }
+
+iface="" rx0=0 tx0=0
+while :; do
+    read -r size avail pct < <(df -B1 --output=size,avail,pcent / | awk 'NR == 2 { sub("%", "", $3); print }')
+    tip="Disk /  ${pct}% used, $(gb "$avail") free of $(gb "$size")"
+
+    now=$(default_iface)
+    if [[ -n $now ]]; then
+        read -r rx tx < <(counters "$now")
+        if [[ $now == "$iface" ]]; then
+            tip+="\nNetwork $now  ↓ $(rate $(( (rx - rx0) / interval )))  ↑ $(rate $(( (tx - tx0) / interval )))"
+        else
+            tip+="\nNetwork $now  measuring…"
+        fi
+        iface=$now rx0=$rx tx0=$tx
+    else
+        iface=""
+        tip+="\nNetwork  offline"
+    fi
+
+    class=""; (( pct >= 90 )) && class="warning"
+    printf '{"text": "󰋊 %s%%", "tooltip": "%s", "class": "%s"}\n' "$pct" "$tip" "$class"
+    sleep "$interval"
+done

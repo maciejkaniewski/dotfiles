@@ -14,14 +14,45 @@ overview {
     backdrop-color "#21222c"
 }
 
-// The focused window glows softly in the accent colour.
+// The focused window glows softly in the accent colour. Floating windows
+// keep the deeper drop shadow config.kdl gives them instead.
 window-rule {
-    match is-focused=true
+    match is-focused=true is-floating=false
     shadow {
         on
         softness 30
         spread 2
         offset x=0 y=0
         color "#bd93f930"
+    }
+}
+
+// The Alt+Tab switcher's highlight behind the chosen window.
+recent-windows {
+    highlight {
+        active-color "#bd93f980"
+        urgent-color "#ff555580"
+    }
+}
+
+// A window shared in a call (or recorded) is outlined in red, so it's clear
+// what others can see. A shared screen isn't outlined; Waybar shows a red
+// "sharing" pill for that (.local/bin/waybar-cast).
+window-rule {
+    match is-window-cast-target=true
+    // A border rather than the focus ring, which is only drawn on the
+    // focused window: this stays when you click away to another window.
+    focus-ring {
+        off
+    }
+    border {
+        on
+        width 2
+        active-color "#ff5555"
+        inactive-color "#ff5555c0"
+    }
+    shadow {
+        on
+        color "#ff555550"
     }
 }

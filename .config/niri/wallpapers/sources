@@ -1,0 +1,27 @@
+# Wallpapers from each theme's community collection, which `wallpaper --fetch`
+# (run by ./install.sh --niri) downloads and blurs into
+# ~/.local/share/wallpapers/{family}/, machine-local. Only this list is in the
+# repo: the images are other people's work, under their collections' terms.
+# Super+Alt+W cycles through the theme's own glow wallpaper ({variant}.svg
+# here) and its family's blurred ones.
+#
+# family      repo@commit                                                         path in the repo
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  landscapes/evening-sky.png
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  landscapes/Cloudsnight.jpg
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  landscapes/salty_mountains.png
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  landscapes/shaded_landscape.png
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  waves/wavy_lines_v01_5120x2880.png
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  misc/lonely-fish.png
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  landscapes/yosemite.png
+dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303              second-collection/soft-waves/dracula-soft-waves-bd93f9.png
+dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303              second-collection/soft-waves/dracula-soft-waves-ff79c6.png
+dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303              second-collection/waves/dracula-waves-bd93f9.png
+dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303              second-collection/illustrations/trees-and-mountains/dracula-mnt-bd93f9.png
+dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303              second-collection/illustrations/trees-and-mountains/dracula-mnt-ff79c6.png
+dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303              second-collection/leaves/dracula-leaves-bd93f9.png
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e  wallpapers/minimalistic/sunset.png
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e  wallpapers/minimalistic/gruvb_solarsys.png
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e  wallpapers/vector graphics/chillhop.com-cosy_retreat_sunset.png
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e  wallpapers/renders/3d_gruvbox.png
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e  wallpapers/photography/sunforest.jpg
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e  wallpapers/photography/lake.png

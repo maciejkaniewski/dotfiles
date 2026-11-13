@@ -2463,12 +2463,13 @@ NIRI_BUILD_DEPS=(gcc clang libudev-dev libgbm-dev libxkbcommon-dev libegl1-mesa-
   libdisplay-info-dev libxcb1-dev libxcb-cursor-dev)
 WAYBAR_BUILD_DEPS=(libgtkmm-3.0-dev libjsoncpp-dev libfmt-dev libspdlog-dev libgtk-layer-shell-dev
   wayland-protocols libdbusmenu-gtk3-dev libupower-glib-dev libpulse-dev libnl-3-dev libnl-genl-3-dev
-  libxkbregistry-dev libevdev-dev libpam0g-dev)
+  libxkbregistry-dev libevdev-dev libpam0g-dev libplayerctl-dev)
 # What the session runs: X11 support, launcher, notifications, lock and idle,
 # wallpaper, the polkit password prompt, the media keys,
-# clipboard history, night light, the sound mixer Waybar opens, and Thunar.
+# clipboard history, night light, the sound mixer Waybar opens, Thunar, and
+# Pillow, which blurs the community wallpapers.
 NIRI_SESSION_PKGS=(xwayland fuzzel mako-notifier swaylock swayidle swaybg policykit-1-gnome
-  playerctl cliphist wl-clipboard wlsunset pulsemixer papirus-icon-theme thunar)
+  playerctl cliphist wl-clipboard wlsunset pulsemixer papirus-icon-theme thunar python3-pil)
 NIRI_LINKS=(
   "niri|$DOTFILES/.config/niri/config.kdl:$HOME/.config/niri/config.kdl"
   "niri|$DOTFILES/.config/waybar/config.jsonc:$HOME/.config/waybar/config.jsonc"
@@ -2481,6 +2482,9 @@ NIRI_LINKS=(
   "niri|$DOTFILES/.local/bin/lock-screen:$HOME/.local/bin/lock-screen"
   "niri|$DOTFILES/.local/bin/waybar-launch:$HOME/.local/bin/waybar-launch"
   "niri|$DOTFILES/.local/bin/battery-notify:$HOME/.local/bin/battery-notify"
+  "niri|$DOTFILES/.local/bin/wallpaper:$HOME/.local/bin/wallpaper"
+  "niri|$DOTFILES/.local/bin/waybar-io:$HOME/.local/bin/waybar-io"
+  "niri|$DOTFILES/.local/bin/waybar-cast:$HOME/.local/bin/waybar-cast"
 )
 # xwayland-satellite has no --version, so the build records what it installed.
 XWS_STAMP=/usr/local/share/dotfiles/xwayland-satellite.version
@@ -2498,7 +2502,10 @@ github_latest_tag() {
 niri_installed_version() {
   case "$1" in
     niri)               [[ -x "$NIRI_BIN" ]] && "$NIRI_BIN" --version 2>/dev/null | awk '{print $2}' ;;
-    waybar)             [[ -x /usr/local/bin/waybar ]] && /usr/local/bin/waybar --version 2>/dev/null | grep -oP 'v\K[0-9.]+' ;;
+    # A Waybar built before libplayerctl-dev was a dependency has no media
+    # player module (mpris), so it counts as missing and gets rebuilt.
+    waybar)             [[ -x /usr/local/bin/waybar ]] && ldd /usr/local/bin/waybar | grep -q libplayerctl \
+                          && /usr/local/bin/waybar --version 2>/dev/null | grep -oP 'v\K[0-9.]+' ;;
     xwayland-satellite) [[ -x /usr/local/bin/xwayland-satellite && -f "$XWS_STAMP" ]] && cat "$XWS_STAMP" ;;
     swaylock-effects)   [[ -x /usr/local/bin/swaylock && -f "$SLE_STAMP" ]] && cat "$SLE_STAMP" ;;
   esac
@@ -2520,9 +2527,12 @@ build_github_tag() {
 }
 
 # The install steps, run inside the checkout by build_github_tag.
+# niri's release profile keeps line tables for backtraces, 130 MB of them;
+# stripped, the binary is about 30 MB.
 niri_build_install() {
   "$HOME/.cargo/bin/cargo" build --release --locked \
-    && sudo install -m 755 target/release/niri resources/niri-session /usr/local/bin/ \
+    && sudo install -m 755 -s target/release/niri /usr/local/bin/ \
+    && sudo install -m 755 resources/niri-session /usr/local/bin/ \
     && sudo install -Dm 644 resources/niri.desktop -t /usr/local/share/wayland-sessions/ \
     && sudo install -Dm 644 resources/niri-portals.conf -t /usr/local/share/xdg-desktop-portal/ \
     && sudo install -Dm 644 resources/niri.service resources/niri-shutdown.target -t /etc/systemd/user/ \
@@ -2662,6 +2672,19 @@ default_file_manager() {
     || log_error "file manager" "xdg-mime default failed"
 }
 
+# The blurred community wallpapers (.config/niri/wallpapers/sources) into
+# ~/.local/share/wallpapers; ones already there are kept. Not fatal: the
+# themes' own glow wallpapers need no download.
+fetch_wallpapers() {
+  local out
+  run_spin_capture "fetching and blurring wallpapers..." out "$DOTFILES/.local/bin/wallpaper" --fetch
+  if [[ "$out" == *" 0 failed"* ]]; then
+    log_ok "wallpapers: ${out#wallpaper: }"
+  else
+    log_error "wallpapers" "${out:-could not fetch} — network down? re-run ./install.sh --niri"
+  fi
+}
+
 install_niri_desktop() {
   local missing=() dep
   for dep in "${NIRI_BUILD_DEPS[@]}" "${WAYBAR_BUILD_DEPS[@]}" "${NIRI_SESSION_PKGS[@]}"; do
@@ -2689,6 +2712,7 @@ install_niri_desktop() {
     make_link "$src" "$dst"
   done
   write_niri_local
+  fetch_wallpapers
   ensure_login_path
   vscode_use_keyring
   default_file_manager
@@ -2850,13 +2874,22 @@ apply_theme() {
   if [[ -x "$NIRI_BIN" ]]; then
     mkdir -p "$HOME/.config/niri" "$HOME/.config/waybar" "$HOME/.config/fuzzel" \
       "$HOME/.config/mako" "$HOME/.config/swaylock"
+    # The wallpaper: the theme's glow, unless one of the family's blurred
+    # community wallpapers is picked (Super+Alt+W, .local/bin/wallpaper), which
+    # stays when switching between variants of the same family. The link was
+    # wallpaper.svg before those existed; the old one goes.
+    local wp_target wp_cur
+    wp_target="$DOTFILES/.config/niri/wallpapers/${stub}.svg"
+    wp_cur=$(readlink "$HOME/.config/niri/wallpaper" 2>/dev/null)
+    [[ "$wp_cur" == "${XDG_DATA_HOME:-$HOME/.local/share}/wallpapers/$family/"* && -f "$wp_cur" ]] && wp_target="$wp_cur"
+    [[ -L "$HOME/.config/niri/wallpaper.svg" ]] && rm -f "$HOME/.config/niri/wallpaper.svg"
     pointers+=(
       "$DOTFILES/.config/niri/${stub}.kdl:$HOME/.config/niri/theme.kdl:niri theme → ${label}"
       "$DOTFILES/.config/waybar/${stub}.css:$HOME/.config/waybar/theme.css:Waybar theme → ${label}"
       "$DOTFILES/.config/fuzzel/${stub}.ini:$HOME/.config/fuzzel/fuzzel.ini:fuzzel theme → ${label}"
       "$DOTFILES/.config/mako/${stub}.conf:$HOME/.config/mako/config:mako theme → ${label}"
       "$DOTFILES/.config/swaylock/${stub}.conf:$HOME/.config/swaylock/config:swaylock theme → ${label}"
-      "$DOTFILES/.config/niri/wallpapers/${stub}.svg:$HOME/.config/niri/wallpaper.svg:wallpaper → ${label}"
+      "$wp_target:$HOME/.config/niri/wallpaper:wallpaper → ${wp_target##*/}"
     )
   fi
 
@@ -2922,8 +2955,10 @@ apply_theme() {
   command_exists makoctl && makoctl reload &>/dev/null
   if [[ -n "$NIRI_SOCKET" ]] && pgrep -x swaybg >/dev/null; then
     pkill -x swaybg
-    niri msg action spawn-sh -- 'exec swaybg -m fill -i ~/.config/niri/wallpaper.svg' &>/dev/null
+    niri msg action spawn-sh -- 'exec swaybg -m fill -i ~/.config/niri/wallpaper' &>/dev/null
   fi
+  # The lock screen's PNG of the new wallpaper (.local/bin/lock-screen).
+  [[ -n "$NIRI_SOCKET" ]] && command_exists lock-screen && { lock-screen --prepare &>/dev/null & }
   return 0
 }
 
@@ -3273,15 +3308,21 @@ verify_symlinks() {
   echo 'no dangling links in ~/.local/bin, /usr/local/bin or /opt'
 }
 
-# install.sh is ~2,700 lines of bash that nothing else exercises line by line, so
-# lint it here: a bug like `local a="$1" b="$a"` passes bash -n and every smoke
-# test, and just quietly never does its job. Warnings and up only; style and info
-# notes are advice, not defects.
+# install.sh is ~3,800 lines of bash that nothing else exercises line by line, so
+# lint it here, with the shell scripts in .local/bin: a bug like
+# `local a="$1" b="$a"` passes bash -n and every smoke test, and just quietly
+# never does its job. Warnings and up only; style and info notes are advice,
+# not defects. The scripts are picked by their #! line, so the Python ones
+# (waybar-calendar) are left out.
 verify_shell_lint() {
   command_exists shellcheck || { echo 'shellcheck not found on PATH (run --setup)'; return 1; }
-  local out; out=$(shellcheck -S warning -f gcc "$DOTFILES/install.sh" 2>&1)
+  local scripts=("$DOTFILES/install.sh") f out
+  for f in "$DOTFILES"/.local/bin/*; do
+    head -1 "$f" | grep -qE '^#!.*(ba|/)sh' && scripts+=("$f")
+  done
+  out=$(shellcheck -S warning -f gcc "${scripts[@]}" 2>&1)
   [[ -z "$out" ]] || { echo "$(wc -l <<<"$out") shellcheck warning(s), first: $(head -1 <<<"$out" | sed "s|^$DOTFILES/||")"; return 1; }
-  echo 'install.sh passes shellcheck (warnings and up)'
+  echo "install.sh and $(( ${#scripts[@]} - 1 )) scripts in .local/bin pass shellcheck (warnings and up)"
 }
 
 # The group database, not `id -nG` with no argument: a user added during this
@@ -3569,6 +3610,8 @@ cmd_clean() {
     "$HOME/.config/fuzzel/fuzzel.ini:$DOTFILES/.config/fuzzel/"
     "$HOME/.config/mako/config:$DOTFILES/.config/mako/"
     "$HOME/.config/swaylock/config:$DOTFILES/.config/swaylock/"
+    "$HOME/.config/niri/wallpaper:$DOTFILES/.config/niri/wallpapers/"
+    "$HOME/.config/niri/wallpaper:${XDG_DATA_HOME:-$HOME/.local/share}/wallpapers/"
     "$HOME/.config/niri/wallpaper.svg:$DOTFILES/.config/niri/wallpapers/"
   )
   for entry in "${pointers[@]}"; do
@@ -3764,7 +3807,7 @@ usage() {
   echo -e "      ${SUBTEXT}Ruff                 ${TEXT}Python linter/formatter (uv tool, on PATH for Neovim and the CLI)${RESET}"
   echo -e "      ${SUBTEXT}basedpyright         ${TEXT}Python type checker (uv tool, on PATH for Neovim and the CLI)${RESET}"
   echo -e "      ${SUBTEXT}StyLua               ${TEXT}Lua formatter (GitHub release, on PATH for Neovim and the CLI)${RESET}"
-  echo -e "      ${SUBTEXT}shellcheck           ${TEXT}shell script linter; --verify runs it on install.sh (uv tool)${RESET}"
+  echo -e "      ${SUBTEXT}shellcheck           ${TEXT}shell script linter; --verify runs it on install.sh and .local/bin (uv tool)${RESET}"
   echo -e "      ${SUBTEXT}lua-language-server  ${TEXT}Lua language server for Neovim (GitHub release, in ~/.local)${RESET}"
   echo -e "    ${TEXT}${BOLD}Shell and fonts${RESET}"
   echo -e "      ${SUBTEXT}Oh My Zsh            ${TEXT}zsh framework${RESET}"

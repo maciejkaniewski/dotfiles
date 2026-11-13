@@ -28,8 +28,9 @@ tooltip {
     border-radius: 10px;
 }
 
-/* The islands: workspaces, clock, and the two groups on the right. */
+/* The islands: workspaces, what's playing, clock, and the two groups on the right. */
 #workspaces,
+#mpris,
 #custom-clock,
 #system,
 #controls {
@@ -66,18 +67,40 @@ tooltip {
     background: @temp;
 }
 
+/* The side screens' bars: one dot per workspace. */
+window#waybar.side #workspaces button {
+    padding: 0 6px;
+}
+
+#mpris {
+    padding: 0 14px;
+    color: @bat;
+}
+#mpris.paused { color: @overlay; }
+
 #custom-clock {
     padding: 0 16px;
     color: @fg;
 }
 
-#cpu, #memory, #temperature, #custom-serial,
+/* Sharing or recording the screen: a red island by the clock. */
+#custom-cast {
+    background: @temp;
+    color: @bg;
+    border-radius: 10px;
+    margin: 4px 0;
+    padding: 0 12px;
+}
+
+#cpu, #memory, #custom-io, #temperature, #custom-serial,
 #tray, #idle_inhibitor, #bluetooth, #pulseaudio, #power-profiles-daemon, #battery, #custom-power {
     padding: 0 8px;
 }
 
 #cpu                  { color: @cpu; }
 #memory               { color: @mem; }
+#custom-io            { color: @net; }
+#custom-io.warning    { color: @bg; background: @temp; border-radius: 8px; }
 #temperature          { color: @temp; }
 #temperature.critical { color: @bg; background: @temp; border-radius: 8px; }
 #custom-serial        { color: @date; }

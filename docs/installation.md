@@ -100,7 +100,7 @@ At the end of `--setup` you are asked for your git name and email, which go into
 | [basedpyright](https://github.com/DetachHead/basedpyright) | latest | Python type checker (`uv tool`, on `PATH` for Neovim and the CLI) |
 | [StyLua](https://github.com/JohnnyMorganz/StyLua) | latest | Lua formatter (GitHub release, on `PATH` for Neovim and the CLI) |
 | [lua-language-server](https://github.com/LuaLS/lua-language-server) | latest | Lua language server for Neovim's `lua_ls` (GitHub release, unpacked into `~/.local/share` and linked into `~/.local/bin`; no sudo) |
-| [shellcheck](https://www.shellcheck.net/) | latest | Lints shell scripts; `--verify` runs it on `install.sh` and fails on any warning (`uv tool`, from the `shellcheck-py` package) |
+| [shellcheck](https://www.shellcheck.net/) | latest | Lints shell scripts; `--verify` runs it on `install.sh` and the shell scripts in `.local/bin`, and fails on any warning (`uv tool`, from the `shellcheck-py` package) |
 
 **Shell and fonts**
 

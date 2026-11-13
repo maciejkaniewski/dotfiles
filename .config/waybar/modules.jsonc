@@ -11,7 +11,7 @@
 
     "group/system": {
         "orientation": "horizontal",
-        "modules": ["cpu", "memory", "temperature", "custom/serial"]
+        "modules": ["cpu", "memory", "custom/io", "temperature", "custom/serial"]
     },
     "group/controls": {
         "orientation": "horizontal",
@@ -38,6 +38,35 @@
         }
     },
 
+    // A red pill while a call shares the screen or a window, or something
+    // records it (.local/bin/waybar-cast); hidden otherwise.
+    "custom/cast": {
+        "exec": "waybar-cast",
+        "return-type": "json",
+        "restart-interval": 5
+    },
+
+    // What's playing (Spotify, a browser tab: anything that speaks MPRIS),
+    // hidden when nothing is. Click to play or pause, right-click for the
+    // next track, middle-click for the previous; scrolling skips too.
+    "mpris": {
+        "format": "{player_icon} {dynamic}",
+        "format-paused": "{status_icon} {dynamic}",
+        "dynamic-order": ["title", "artist"],
+        "dynamic-len": 30,
+        "player-icons": {
+            "default": "󰎆",
+            "spotify": "󰓇",
+            "firefox": "󰈹",
+            "chromium": "󰊯",
+            "chrome": "󰊯"
+        },
+        "status-icons": { "paused": "󰏤" },
+        "tooltip-format": "{player}: {title}\n{artist}  {album}",
+        "on-scroll-up": "playerctl previous",
+        "on-scroll-down": "playerctl next"
+    },
+
     // From .local/bin/waybar-calendar rather than Waybar's clock, whose calendar
     // can't colour weekends. Hover for the month: weeks start on Monday,
     // Saturday and Sunday are red.
@@ -57,6 +86,14 @@
         "interval": 5,
         "format": "󰍺 {percentage}%",
         "tooltip-format": "Memory {used:0.1f} / {total:0.1f} GB\nSwap {swapUsed:0.1f} / {swapTotal:0.1f} GB",
+        "on-click": "kitty --title btop -e btop"
+    },
+    // How full / is; hover for free space and the network's speed
+    // (.local/bin/waybar-io).
+    "custom/io": {
+        "exec": "waybar-io",
+        "return-type": "json",
+        "restart-interval": 10,
         "on-click": "kitty --title btop -e btop"
     },
     // coretemp is Intel's CPU sensor; set k10temp on an AMD machine.

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2160" viewBox="0 0 3840 2160">
   <!-- Catppuccin Macchiato wallpaper for the niri session: the theme's dark tones with soft
        glows of its accent colours. The theme picker links
-       ~/.config/niri/wallpaper.svg here. -->
+       ~/.config/niri/wallpaper here. -->
   <defs>
     <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#24273a"/>

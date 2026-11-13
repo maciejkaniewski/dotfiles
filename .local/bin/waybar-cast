@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# waybar-cast: a red "sharing" pill in Waybar while anything captures the
+# screen: a call sharing a screen or a window (through the portal), or a
+# recorder such as wf-recorder. Hidden otherwise. custom/cast in
+# .config/waybar/modules.jsonc runs it.
+#
+# Follows niri's event stream and asks for the current casts whenever one
+# starts, changes or stops. niri also outlines a shared window in red (the
+# is-window-cast-target rule in the theme files); a shared screen has no
+# outline, so this pill is the reminder for that.
+
+show() {
+    niri msg -j casts | jq -c '
+        [.[] | select(.is_active)] as $c
+        | if ($c | length) == 0 then {text: "", tooltip: "", class: ""}
+          else {
+            text: "󰐾 \(if any($c[]; .kind == "WlrScreencopy") and all($c[]; .kind == "WlrScreencopy")
+                       then "recording" else "sharing" end)",
+            tooltip: ($c | map(
+                (if .kind == "WlrScreencopy" then "Recording " else "Sharing " end)
+                + (if .target.Output then "screen \(.target.Output.name)"
+                   elif .target.Window then "a window"
+                   else "nothing yet" end)) | join("\n")),
+            class: "active"
+          } end'
+}
+
+show
+niri msg -j event-stream | while IFS= read -r event; do
+    [[ $event == '{"Cast'* ]] && show
+done

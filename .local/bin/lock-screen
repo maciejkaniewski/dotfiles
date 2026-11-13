@@ -2,22 +2,78 @@
 # lock-screen: lock the niri session. Super+Alt+L, the power menu and swayidle
 # (idle, before suspend) all run this, so the look is set in one place.
 #
-# The theme's wallpaper behind the ring: nothing to capture or blur, so the
-# lock is instant. With swaylock-effects (which --niri builds into
-# /usr/local/bin, patched for a second clock), the ring always shows the time
-# and date, and under them the first zone of ~/.config/waybar/timezones, the
-# same machine-local file as Waybar's extra clocks. Plain swaylock, should
-# that be the one on PATH, still locks. Colours come from
-# ~/.config/swaylock/config, which the theme picker links. -f returns once the
-# screen is locked, so swayidle's before-sleep waits for it before suspending.
+#   lock-screen             lock now
+#   lock-screen --prepare   render the wallpaper for the lock screen ahead of
+#                           time (.local/bin/wallpaper and the theme picker
+#                           run this whenever the wallpaper changes)
+#
+# The current wallpaper behind the ring: nothing to capture or blur. A blurred
+# community wallpaper is a JPEG and loads at once; the themes' glow ones are
+# SVGs, which swaylock would take about a second to draw, so for those it gets
+# a PNG rendered at the largest screen's size and kept in ~/.cache/lock-screen.
+# Either way it locks in about a tenth of a second, then eases in over 0.2 s.
+# Until the PNG exists, the SVG is used and the PNG rendered for next time.
+#
+# With swaylock-effects (which --niri builds into /usr/local/bin, patched for
+# a second clock), the ring always shows the time and date, and under them
+# the first zone of ~/.config/waybar/timezones, the same machine-local file as
+# Waybar's extra clocks. Plain swaylock, should that be the one on PATH, still
+# locks. Colours come from ~/.config/swaylock/config, which the theme picker
+# links. -f returns once the screen is locked, so swayidle's before-sleep
+# waits for it before suspending.
 
-wallpaper="$HOME/.config/niri/wallpaper.svg"
+wallpaper="$HOME/.config/niri/wallpaper"
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/lock-screen"
+
+# The PNG for the current wallpaper at the largest connected screen's size.
+png_path() {
+    local size
+    size=$(niri msg -j outputs 2>/dev/null | jq -r '
+        [.[] | select(.current_mode != null) | .modes[.current_mode]]
+        | max_by(.width * .height) // {width: 3840, height: 2160}
+        | "\(.width)x\(.height)"')
+    echo "$cache/$(basename "$(readlink -f "$wallpaper")" .svg)-${size:-3840x2160}.png"
+}
+
+# Renders the PNG with GdkPixbuf, the library swaylock and swaybg load SVGs
+# with, so it looks the same; written aside and moved, so a lock never reads
+# half a file. Old renders are dropped.
+prepare() {
+    local png size w h
+    [[ $(readlink -f "$wallpaper") == *.svg ]] || return 0
+    png=$(png_path)
+    [[ -s $png ]] && return 0
+    size=${png##*-}; size=${size%.png}; w=${size%x*}; h=${size#*x}
+    mkdir -p "$cache"
+    find "$cache" -name '*.png' -delete
+    python3 - "$(readlink -f "$wallpaper")" "$w" "$h" "$png.tmp" <<'EOF' && mv "$png.tmp" "$png"
+import sys, gi
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import GdkPixbuf
+src, w, h, out = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+GdkPixbuf.Pixbuf.new_from_file_at_scale(src, w, h, False).savev(out, "png", [], [])
+EOF
+}
+
+if [[ $1 == --prepare ]]; then
+    prepare
+    exit
+fi
+
+image=$(png_path)
+if [[ $(readlink -f "$wallpaper") != *.svg ]]; then
+    image=$wallpaper
+elif [[ ! -s $image ]]; then
+    image=$wallpaper
+    prepare &>/dev/null &
+    disown
+fi
 
 if swaylock --help 2>&1 | grep -q -- '--clock'; then
     zones="$HOME/.config/waybar/timezones"
     [[ -r $zones ]] && SWAYLOCK_EXTRA_TZ=$(sed 's/#.*//; s/[[:space:]]//g; /^$/d' "$zones" | head -1)
     export SWAYLOCK_EXTRA_TZ
-    exec swaylock -f -i "$wallpaper" --clock --indicator --indicator-radius 130 \
-        --timestr '%H:%M' --datestr '%a %d %b' "$@"
+    exec swaylock -f -i "$image" --clock --indicator --indicator-radius 130 \
+        --timestr '%H:%M' --datestr '%a %d %b' --fade-in 0.2 "$@"
 fi
-exec swaylock -f -i "$wallpaper" "$@"
+exec swaylock -f -i "$image" "$@"

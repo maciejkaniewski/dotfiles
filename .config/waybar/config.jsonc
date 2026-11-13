@@ -1,6 +1,6 @@
 // Waybar: rounded islands along the top of each screen. One screen gets the
-// main bar (workspaces, clock, system readouts, tray, controls), the others a
-// slim one with just their workspaces and the clock. .local/bin/waybar-launch
+// main bar (workspaces, what's playing, clock, system readouts, tray,
+// controls), the others a slim one with their workspaces as dots and the clock. .local/bin/waybar-launch
 // starts Waybar with $WAYBAR_MAIN set to the main screen; Super+Shift+B makes
 // the focused screen the main one, and undocked, the laptop's screen takes
 // over. Super+B hides and shows the bars. Under niri, kitty's tab bar leaves
@@ -14,8 +14,8 @@
         "name": "main",
         "output": "$WAYBAR_MAIN",
         "include": ["~/.config/waybar/modules.jsonc"],
-        "modules-left": ["niri/workspaces"],
-        "modules-center": ["custom/clock"],
+        "modules-left": ["niri/workspaces", "mpris"],
+        "modules-center": ["custom/cast", "custom/clock"],
         "modules-right": ["group/system", "group/controls"]
     },
     {
@@ -23,7 +23,13 @@
         "output": ["!$WAYBAR_MAIN", "*"],
         "include": ["~/.config/waybar/modules.jsonc"],
         "modules-left": ["niri/workspaces"],
-        "modules-center": ["custom/clock"],
-        "modules-right": []
+        "modules-center": ["custom/cast", "custom/clock"],
+        "modules-right": [],
+        // Plain dots here instead of app icons, so the side screens stay calm;
+        // the screen you're on still shows its workspace in the accent colour.
+        "niri/workspaces": {
+            "format": "{icon}",
+            "format-icons": { "active": "󰝥", "default": "󰝦" }
+        }
     }
 ]
