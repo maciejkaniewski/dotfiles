@@ -69,6 +69,9 @@ prefer-no-csd
 environment {
     // nmtui (Waybar's network click) in the terminal's own colours, which the
     // theme picker sets, instead of newt's fixed blue and red.
+    // Eclipse's DevStyle (STM32CubeIDE) asks for this at every start under
+    // Wayland: WebKitGTK's compositing clashes with Java AWT there.
+    WEBKIT_DISABLE_COMPOSITING_MODE "1"
     NEWT_COLORS "root=default,default;border=blue,default;window=default,default;shadow=default,default;title=brightblue,default;button=black,blue;actbutton=black,magenta;compactbutton=lightgray,default;checkbox=lightgray,default;actcheckbox=black,blue;entry=white,black;disentry=gray,default;label=default,default;listbox=default,default;actlistbox=black,blue;sellistbox=blue,default;actsellistbox=black,blue;textbox=default,default;acttextbox=black,blue;helpline=default,default;roottext=default,default;emptyscale=,black;fullscale=,blue"
 }
 
