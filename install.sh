@@ -87,6 +87,14 @@ command_exists() { command -v "$1" &>/dev/null; }
 # reinstalled, and ser2net's --verify check could not pass after its removal.
 pkg_installed() { [[ $(dpkg-query -W -f='${db:Status-Status}' "$1" 2>/dev/null) == installed ]]; }
 
+# Whether apt has a version of package $1 to install. Not `apt-cache show`:
+# that also succeeds, printing nothing, for a name other packages merely refer
+# to (22.04 has clang-19 only as one), so apt.llvm.org was never added there.
+apt_has_candidate() {
+  local c; c=$(apt-cache policy "$1" 2>/dev/null | awk '$1 == "Candidate:" { print $2 }')
+  [[ -n "$c" && "$c" != "(none)" ]]
+}
+
 # The header every command opens with. Ends with the version of the repo the
 # run used: the tag on HEAD (v1.0.0), or past one the commits since and the
 # hash (v1.0.0-3-gabc1234), or just the hash before any tag. Left off when
@@ -1241,7 +1249,7 @@ llvm_ensure_tinfo5() {
 install_clang_compiler() {
   local major; major=$(tool_pin clang)
   [[ -n "$major" ]] || return 0
-  apt-cache show "clang-$major" &>/dev/null || add_llvm_apt_repo "$major" || return
+  apt_has_candidate "clang-$major" || add_llvm_apt_repo "$major" || return
   local pkg
   for pkg in "clang-$major" "libclang-$major-dev"; do
     if pkg_installed "$pkg"; then
@@ -1271,7 +1279,7 @@ add_llvm_apt_repo() {
     curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor | sudo tee '$key' >/dev/null &&
     echo 'deb [arch=${ARCH_DEB} signed-by=$key] https://apt.llvm.org/$codename/ llvm-toolchain-$codename-$major main' | sudo tee '$list' >/dev/null &&
     sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq" \
-    && apt-cache show "clang-$major" &>/dev/null \
+    && apt_has_candidate "clang-$major" \
     && log_ok "apt.llvm.org added (Ubuntu $codename doesn't package clang-$major)" \
     || { log_error "clang-$major" "not in Ubuntu $codename's archive, and adding apt.llvm.org failed"; return 1; }
 }
@@ -2764,7 +2772,8 @@ install_cliphist() {
   local want have tmp="$SCRIPT_TMPDIR/cliphist"
   want=$(tool_pin cliphist)
   [[ -n "$want" ]] || { log_error "cliphist" "needs a pin in versions"; return 1; }
-  have=$(command_exists cliphist && cliphist version 2>/dev/null | awk '$1 == "version" { print $2 }')
+  # cliphist prints its version to stderr.
+  have=$(command_exists cliphist && cliphist version 2>&1 | awk '$1 == "version" { print $2 }')
   needs_install "cliphist" "$have" "$want" "$want" || return 0
   run_spin "downloading cliphist $want..." curl -fsSL -o "$tmp" \
       "https://github.com/sentriz/cliphist/releases/download/v$want/v$want-linux-amd64" \
