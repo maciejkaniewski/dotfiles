@@ -146,7 +146,9 @@ screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
 // ~/.cache/waybar/waybar.log.
 spawn-at-startup "waybar-launch"
 spawn-at-startup "mako"
-spawn-at-startup "/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1"
+// The password prompt for admin actions. Through X11 (xwayland-satellite):
+// on Wayland it crashes as soon as it is asked, on an X11-only call.
+spawn-sh-at-startup "GDK_BACKEND=x11 exec /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1"
 // Low-battery warnings (15%, 5%) and power-saver at 20%, as GNOME gave.
 spawn-at-startup "battery-notify"
 // A notification whenever a USB serial adapter is plugged in or out.
@@ -245,6 +247,13 @@ window-rule {
     default-column-width { proportion 0.66667; }
 }
 
+// btop (Waybar's CPU and memory readouts) needs 80 columns, more than half of a
+// scaled laptop screen holds.
+window-rule {
+    match app-id="^kitty$" title="^btop$"
+    default-column-width { proportion 0.66667; }
+}
+
 // Chat and mail open on workspace 1 (see the workspace below).
 window-rule {
     match app-id=r#"(?i)slack|thunderbird|teams"#
@@ -255,6 +264,7 @@ window-rule {
 window-rule {
     match app-id=r#"^org\.gnome\.(Calculator|Settings|Calendar)$"#
     match app-id="^nm-connection-editor$"
+    match app-id="^wdisplays$"
     open-floating true
 }
 

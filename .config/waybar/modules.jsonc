@@ -146,7 +146,7 @@
         "format-icons": { "default": ["󰕿", "󰖀", "󰕾"], "headphone": "󰋋" },
         "tooltip-format": "{desc}",
         "on-click": "kitty --title pulsemixer -e pulsemixer",
-        "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+        "on-click-right": "pactl set-sink-mute @DEFAULT_SINK@ toggle"
     },
     // GNOME's power modes (power-profiles-daemon, which runs in any session).
     // Click for the next mode, right-click for the previous one.

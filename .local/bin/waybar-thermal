@@ -41,14 +41,18 @@ while :; do
     if [[ -n $fan_file ]]; then
         rpm=$(cat "$fan_file")
         if (( rpm == 0 )); then
-            short="off"
-        elif (( rpm >= 1000 )); then
-            short=$(awk -v r="$rpm" 'BEGIN { printf "%.1fk", r / 1000 }')
+            # A stopped fan: just the crossed-out fan, faded.
+            text+="${text:+ }<span alpha='55%'>󰠝</span>"
+            tip+="${tip:+\n}Fan off"
         else
-            short=$rpm
+            if (( rpm >= 1000 )); then
+                short=$(awk -v r="$rpm" 'BEGIN { printf "%.1fk", r / 1000 }')
+            else
+                short=$rpm
+            fi
+            text+="${text:+ }󰈐 $short"
+            tip+="${tip:+\n}Fan ${rpm} RPM"
         fi
-        text+="${text:+ }󰈐 $short"
-        tip+="${tip:+\n}Fan ${rpm} RPM"
         level=$(awk '$1 == "level:" { print $2 }' /proc/acpi/ibm/fan 2>/dev/null)
         [[ -n $level ]] && tip+=" (level $level)"
     fi
