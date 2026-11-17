@@ -27,3 +27,18 @@ niri=26.04
 xwayland-satellite=0.8.3
 waybar=0.16.0
 swaylock-effects=1.7.0.0  # lock screen with a clock, patched for a second time zone; no releases/latest, so keep a pin
+
+# Ubuntu 22.04 only: what it lacks or has too old for the niri desktop, built
+# from source into /opt/niri-deps or /usr/local/bin (see NIRI_DEPS in
+# install.sh). Later releases take these from apt. No "latest" here.
+wayland-protocols=1.45
+libinput=1.28.1        # niri needs 1.21; 22.04 has 1.20, which GNOME keeps
+libdisplay-info=0.2.0
+libwayland=1.23.1      # for Xwayland only
+xwayland=23.1.2        # xwayland-satellite needs 23.1
+swayidle=1.9.1
+pixman=0.46.4          # for fuzzel
+fuzzel=1.15.0
+fcft=3.3.3             # fuzzel's font library, built in
+wlsunset=0.4.0
+cliphist=0.7.0

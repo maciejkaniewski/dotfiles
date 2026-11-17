@@ -13,17 +13,30 @@ Answer yes when `./install.sh --setup` asks, or, on a machine that's already set
 ```
 
 - **Built from source, at the versions in [`versions`](../versions):** niri, xwayland-satellite (runs X11 apps) and Waybar. Ubuntu 24.04 packages none of the first two, and its Waybar 0.9.24 predates the niri modules; 26.04 has Waybar 0.15 but still no niri, and the same apt packages under the same names. The builds need Rust and take about 15 minutes the first time; niri's binary is installed stripped (about 26 MB rather than 133). Once niri is installed, `--setup` rebuilds only when a pin moves.
-- **From apt:** fuzzel (launcher), mako (notifications), swaylock and swayidle (lock and idle), swaybg (wallpaper), the GNOME polkit agent (password prompts), playerctl (media keys), and the build dependencies.
+- **From apt:** fuzzel (launcher), mako (notifications), swaylock and swayidle (lock and idle), swaybg (wallpaper), the GNOME polkit agent (password prompts; run through X11, since on Wayland it crashes as soon as it's asked), playerctl (media keys), wdisplays (arranging screens), and the build dependencies.
+- **snapd-desktop-integration's theme installs off:** it would otherwise try to install a theme snap matching the Papirus icons at every login, asking for a password. `--niri` disconnects its `snap-themes-control` plug; everything else it does stays.
 - **Configs:** `.config/niri/config.kdl` and Waybar's config and stylesheet are symlinked, and `~/.config/niri/local.kdl` is written with this machine's keyboard layout.
 - **Wallpapers:** the community wallpapers listed in `.config/niri/wallpapers/sources` (by repo, pinned commit and path) are downloaded and blurred with Pillow into `~/.local/share/wallpapers/{family}/`, about 3 MB in all. Only the list is in this repo, since the images are other people's work under their collections' terms. `wallpaper --fetch` does it again, skipping ones already there.
 
 Then log out, pick niri from the gear on the login screen, and press `Super+Shift+/` for the list of key bindings.
 
+### Ubuntu 22.04
+
+`--niri` works on 22.04 too, with more of it built from source, at the pins under "Ubuntu 22.04 only" in [`versions`](../versions). It takes about 10 minutes more than on 24.04.
+
+- **niri needs libinput 1.21**, and 22.04 has 1.20, which GNOME uses. A newer libinput goes to `/opt/niri-deps`, which isn't on the system's library path: niri finds it there by rpath, and GNOME keeps the system's. The same goes for libdisplay-info, which 22.04 doesn't package. `./install.sh --verify` checks niri loads that libinput.
+- **No screen sharing**: 22.04's PipeWire (0.3.48) is too old for niri's bindings, so niri is built without it.
+- **X11 apps** need Xwayland 23.1 (22.04 has 22.1), built into `/opt/niri-deps/xwayland` with the libwayland it needs, and linked as `/usr/local/bin/Xwayland`. GNOME starts `/usr/bin/Xwayland` by its full path, so it keeps its own.
+- **Waybar** builds with a newer wayland-protocols (in `/opt/niri-deps`), its own fmt and spdlog, and `patches/waybar/` for 22.04's gcc 11.
+- **Built into `/usr/local/bin`**, as 22.04 lacks them or has them too old: fuzzel (with pixman 0.46 and fcft built in), swayidle (22.04's speaks only KDE's idle protocol), wlsunset, and cliphist (its released binary).
+
+Each of these leaves a stamp in `/usr/local/share/dotfiles/`, so `--setup` rebuilds one only when its pin moves; deleting a stamp rebuilds it on the next run.
+
 ## What runs in the session
 
 | Part | Tool |
 |---|---|
-| Bar | Waybar, as rounded islands. The **main screen** gets the full bar: workspaces (with an icon per window), what's playing, the clock, system readouts (CPU, memory, disk, temperature and fan speed, serial adapters), the tray and controls (keep-awake, Bluetooth, volume, power mode, battery, power menu). The **other screens** get a slim bar with their workspaces as dots and the clock. `Super+Shift+B` makes the focused screen the main one, remembered by make, model and serial in the machine-local `~/.config/waybar/main-output`; when that screen isn't connected, the laptop's takes over. `.local/bin/waybar-launch` runs Waybar this way and restarts it when screens come or go. Hovering over the clock shows the month (weeks from Monday, weekends in red) |
+| Bar | Waybar, as rounded islands. The **main screen** gets the full bar: workspaces (with an icon per window), what's playing, the clock, system readouts (CPU, memory, disk, temperature and fan speed, a crossed-out fan when it's stopped, serial adapters), the tray and controls (keep-awake, Bluetooth, volume, power mode, battery, power menu). The **other screens** get a slim bar with their workspaces as dots and the clock. `Super+Shift+B` makes the focused screen the main one, remembered by make, model and serial in the machine-local `~/.config/waybar/main-output`; when that screen isn't connected, the laptop's takes over. `.local/bin/waybar-launch` runs Waybar this way and restarts it when screens come or go. Hovering over the clock shows the month (weeks from Monday, weekends in red) |
 | Launcher | fuzzel (`Super+D`) |
 | Notifications | mako |
 | Network | nm-applet's Wi-Fi icon in Waybar's tray: its menu lists Wi-Fi networks and VPNs. The session's XDG autostart starts it, as GNOME's does |
@@ -43,7 +56,7 @@ Then log out, pick niri from the gear on the login screen, and press `Super+Shif
 | Night light | wlsunset: warmer colours from 20:00 to 06:00 (change the times in `config.kdl`) |
 | Wallpaper | swaybg. By default the theme's own glow, `.config/niri/wallpapers/{variant}.svg` (its dark tones with soft glows of its accents). `Super+Alt+W` cycles on through its family's community wallpapers ([Catppuccin](https://github.com/zhichaoh/catppuccin-wallpapers), [Dracula](https://github.com/dracula/wallpaper), [Gruvbox](https://github.com/AngelJumbo/gruvbox-wallpapers)), blurred and dimmed into soft fields of their colours to match the glow (`.local/bin/wallpaper`). Switching between variants of a family keeps the one you picked; switching family goes back to the glow |
 | Files | Thunar, set as the app for folders (`xdg-open .`, `o`), instead of GNOME Files, which waits on GNOME's Tracker indexer and stays tied to the terminal. yazi (`Super+E`, `y`) for the terminal |
-| Settings | GNOME's Settings app (`Super+,`) for Wi-Fi, Bluetooth and sound; monitors are set in `local.kdl` instead |
+| Settings | GNOME's Settings app (`Super+,`) for Wi-Fi, Bluetooth and sound. Monitors: wdisplays to try an arrangement out (niri doesn't save what it sets), `local.kdl` to keep one |
 | X11 apps | xwayland-satellite, which niri starts by itself when the first X11 app connects |
 | Screen sharing | xdg-desktop-portal-gnome, so call apps can share one window or a whole screen. A shared window gets a red border; for a shared screen, and while anything records it, Waybar shows a red "sharing" pill by the clock on every screen (`.local/bin/waybar-cast`, from niri's list of screencasts). Likewise, a red microphone appears there while any app records from a mic; hover names the app |
 
@@ -107,9 +120,9 @@ The volume, brightness and media keys work as usual, also on the lock screen.
 
 ## Window rules
 
-- Browsers open at two thirds of the screen width.
+- Browsers open at two thirds of the screen width, and so does btop from Waybar's CPU and memory readouts, which needs 80 columns: more than half of a scaled laptop screen holds.
 - Slack, Thunderbird and Teams open on workspace 1. A rule can only target a named workspace, so workspace 1 is one, named "1": niri puts named workspaces first and keeps them even when empty, so the numbering stays 1, 2, 3 and `Super+1` reaches it.
-- Calculator, Settings, Calendar, the network connection editor and `nmtui` float.
+- Calculator, Settings, Calendar, the network connection editor, wdisplays and `nmtui` float.
 - A workspace's only window sits in the middle of the screen.
 - Dialogs float on their own. Angry IP Scanner's (Java, through X11) float at a minimum of 460×340, since they otherwise open far too small for their contents.
 - Clicking a tray icon or notification of Slack, Discord or Telegram brings its window forward (`honor-xdg-activation-with-invalid-serial`), and only the focused window counts as active, so Electron apps (Slack, Teams, VS Code) don't hold back notifications (`deactivate-unfocused-windows`). Both are niri debug options, which may change between releases.

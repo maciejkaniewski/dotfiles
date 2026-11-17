@@ -2469,8 +2469,27 @@ WAYBAR_BUILD_DEPS=(libgtkmm-3.0-dev libjsoncpp-dev libfmt-dev libspdlog-dev libg
 # wallpaper, the polkit password prompt, the media keys,
 # clipboard history, night light, the sound mixer Waybar opens, Thunar, and
 # Pillow, which blurs the community wallpapers.
+# pactl and gdbus are for .local/bin/osd; wdisplays arranges screens.
 NIRI_SESSION_PKGS=(xwayland fuzzel mako-notifier swaylock swayidle swaybg policykit-1-gnome
-  playerctl cliphist wl-clipboard wlsunset pulsemixer papirus-icon-theme thunar python3-pil)
+  playerctl cliphist wl-clipboard wlsunset pulsemixer papirus-icon-theme thunar python3-pil
+  pulseaudio-utils libglib2.0-bin wdisplays)
+
+# Ubuntu 22.04 (anything before 24.04) gets the same desktop with more of it
+# built from source, at the pins under "Ubuntu 22.04 only" in the versions file.
+# niri needs libinput 1.21 and 22.04 has 1.20, which GNOME uses, so a newer one
+# goes to /opt/niri-deps: not on the loader's path, so niri alone finds it, by
+# rpath. Waybar's niri modules, fuzzel and xwayland-satellite (Xwayland 23.1)
+# likewise need newer libraries than 22.04's, and it packages neither fuzzel,
+# cliphist nor wlsunset. niri is built without screen sharing there, as its
+# PipeWire (0.3.48) is too old for niri's bindings. Each build sees only the
+# pkg-config directories it needs, so nothing links a library from
+# /opt/niri-deps that it couldn't find again at run time.
+NIRI_DEPS=/opt/niri-deps
+NIRI_OLD_NOT_IN_APT=(libinput-dev libdisplay-info-dev fuzzel cliphist wlsunset)
+NIRI_OLD_BUILD_DEPS=(libmtdev-dev scdoc libtllist-dev libpng-dev libffi-dev libexpat1-dev libxml2-dev
+  libdrm-dev libxcvt-dev libepoxy-dev libxfont-dev libxkbfile-dev xtrans-dev libxshmfence-dev
+  libtirpc-dev x11proto-dev libbsd-dev mesa-common-dev)
+niri_old_ubuntu() { version_lt "$(. /etc/os-release && echo "$VERSION_ID")" 24.04; }
 NIRI_LINKS=(
   "niri|$DOTFILES/.config/niri/config.kdl:$HOME/.config/niri/config.kdl"
   "niri|$DOTFILES/.config/waybar/config.jsonc:$HOME/.config/waybar/config.jsonc"
@@ -2522,32 +2541,50 @@ niri_installed_version() {
   esac
 }
 
-# Clones tag $3 of GitHub repo $2 and builds it; $1 names the build log. The
-# tree lives under ~/.cache rather than /tmp, since niri's takes 2 GB, and is
-# deleted once installed. Runs the rest of the arguments in the checkout.
+# A shallow clone of tag $1 of $2 into $3, without the LFS filter .gitconfig
+# sets up: --niri can run before --setup has installed git-lfs, and none of
+# these repos use it.
+clone_tag() {
+  git -c filter.lfs.process= -c filter.lfs.smudge=cat -c filter.lfs.required=false \
+    -c advice.detachedHead=false clone -q --depth 1 --branch "$1" "$2" "$3"
+}
+
+# Clones tag $3 of repo $2 (owner/name on GitHub, or a full URL elsewhere) and
+# builds it; $1 names the build log. The tree lives under ~/.cache rather than
+# /tmp, since niri's takes 2 GB, and is deleted once installed. Runs the rest
+# of the arguments in the checkout.
 build_github_tag() {
   local name="$1" repo="$2" tag="$3"; shift 3
   local cache="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles" src log
   src="$cache/build/$name"; log="$cache/$name-build.log"
+  [[ "$repo" == *://* ]] || repo="https://github.com/$repo.git"
   mkdir -p "$cache/build"; rm -rf "$src"
   {
-    git clone -q --depth 1 --branch "$tag" "https://github.com/$repo.git" "$src" \
-      && cd "$src" && "$@"
+    clone_tag "$tag" "$repo" "$src" && cd "$src" && "$@"
   } >"$log" 2>&1 || { tail -5 "$log" >&2; echo "full log: $log" >&2; return 1; }
   rm -rf "$src"
 }
 
 # The install steps, run inside the checkout by build_github_tag.
 # niri's release profile keeps line tables for backtraces, 130 MB of them;
-# stripped, the binary is about 30 MB.
+# stripped, the binary is about 30 MB. On 22.04 it links /opt/niri-deps'
+# libinput and libdisplay-info, and leaves out screen sharing (see NIRI_DEPS).
+# The unit names niri by a bare name (or /usr/bin/niri in older releases); the
+# full path doesn't depend on the user manager's PATH.
 niri_build_install() {
-  "$HOME/.cargo/bin/cargo" build --release --locked \
+  local args=(--release --locked) env=()
+  if niri_old_ubuntu; then
+    args+=(--no-default-features --features "dbus,systemd")
+    env=(PKG_CONFIG_PATH="$NIRI_DEPS/lib/pkgconfig"
+      RUSTFLAGS="-L native=$NIRI_DEPS/lib -C link-arg=-Wl,-rpath,$NIRI_DEPS/lib")
+  fi
+  env "${env[@]}" "$HOME/.cargo/bin/cargo" build "${args[@]}" \
     && sudo install -m 755 -s target/release/niri /usr/local/bin/ \
     && sudo install -m 755 resources/niri-session /usr/local/bin/ \
     && sudo install -Dm 644 resources/niri.desktop -t /usr/local/share/wayland-sessions/ \
     && sudo install -Dm 644 resources/niri-portals.conf -t /usr/local/share/xdg-desktop-portal/ \
     && sudo install -Dm 644 resources/niri.service resources/niri-shutdown.target -t /etc/systemd/user/ \
-    && sudo sed -i "s|/usr/bin/niri|$NIRI_BIN|" /etc/systemd/user/niri.service
+    && sudo sed -i "s|^ExecStart=niri |ExecStart=$NIRI_BIN |; s|/usr/bin/niri|$NIRI_BIN|" /etc/systemd/user/niri.service
 }
 
 xws_build_install() {
@@ -2560,9 +2597,19 @@ xws_build_install() {
 
 # gtk-layer-shell and spdlog are newer than 24.04 has, so meson builds them as
 # subprojects; static, so nothing beyond the waybar binary lands in /usr/local.
+# On 22.04 it also takes fmt from a subproject (22.04's fmt 8 doesn't compile
+# with its gcc 11 here), wayland-protocols from /opt/niri-deps, and the patches
+# in patches/waybar/ for gcc 11.
 waybar_build_install() {
-  meson setup build --prefix=/usr/local --buildtype=release -Ddefault_library=static \
-      -Dman-pages=disabled -Dtests=disabled \
+  local patch extra=() pc=""
+  if niri_old_ubuntu; then
+    for patch in "$DOTFILES"/patches/waybar/*.patch; do
+      git apply "$patch" || return 1
+    done
+    extra=("--force-fallback-for=fmt,spdlog"); pc="$NIRI_DEPS/share/pkgconfig"
+  fi
+  PKG_CONFIG_PATH="$pc" meson setup build --prefix=/usr/local --buildtype=release -Ddefault_library=static \
+      -Dman-pages=disabled -Dtests=disabled "${extra[@]}" \
     && ninja -C build \
     && sudo install -m 755 build/waybar /usr/local/bin/
 }
@@ -2601,6 +2648,153 @@ install_niri_component() {
   run_spin "building $key $want (a few minutes)..." build_github_tag "$key" "$repo" "$prefix$want" "$step" "$want" \
     && log_ok "$key $want installed in /usr/local/bin" \
     || { log_error "$key" "build failed"; return 1; }
+}
+
+# ── niri desktop on Ubuntu 22.04 ──
+# The builds NIRI_DEPS describes. Libraries go to /opt/niri-deps; the tools
+# 22.04 lacks or has too old to /usr/local/bin, where they win over apt's on
+# PATH. None of them reports its version the same way, so each install writes
+# a stamp beside xwayland-satellite's.
+old_stamp() { echo "/usr/local/share/dotfiles/$1.version"; }
+
+# sudo has its own PATH, without ~/.local/bin where uv puts meson.
+meson_sudo_install() { sudo "$(command -v meson)" install -C build --quiet; }
+
+# The XML protocol definitions, which Waybar, fuzzel and Xwayland need newer
+# than 22.04's 1.25.
+wayland_protocols_build_install() {
+  meson setup build --prefix="$NIRI_DEPS" --libdir=lib -Dtests=false \
+    && ninja -C build \
+    && meson_sudo_install
+}
+
+# libinput for niri. Its udev rules and helpers stay in the prefix too: the
+# system's 1.20 keeps the ones in /lib/udev. The tools in bin/ have no rpath,
+# so they need LD_LIBRARY_PATH=/opt/niri-deps/lib.
+libinput_build_install() {
+  meson setup build --prefix="$NIRI_DEPS" --libdir=lib --buildtype=release \
+      -Dudev-dir="$NIRI_DEPS/lib/udev" -Ddebug-gui=false -Dtests=false -Ddocumentation=false -Dlibwacom=false \
+    && ninja -C build \
+    && meson_sudo_install
+}
+
+# Monitor EDID parsing for niri, which 22.04 doesn't package. Static, so niri
+# needs nothing of it at run time.
+libdisplay_info_build_install() {
+  meson setup build --prefix="$NIRI_DEPS" --libdir=lib --buildtype=release -Ddefault_library=static \
+    && ninja -C build \
+    && meson_sudo_install
+}
+
+# libwayland 1.21 or newer, for Xwayland alone, so in a prefix of its own:
+# niri's rpath must not reach it.
+libwayland_build_install() {
+  meson setup build --prefix="$NIRI_DEPS/xwayland" --libdir=lib --buildtype=release \
+      -Ddocumentation=false -Dtests=false -Ddtd_validation=false \
+    && ninja -C build \
+    && meson_sudo_install
+}
+
+# Xwayland 23.1, the oldest xwayland-satellite runs with; 22.04 has 22.1.
+# GNOME runs /usr/bin/Xwayland by its full path, so the link in /usr/local/bin
+# reaches only xwayland-satellite. Keyboard layouts come from the system's xkb.
+xwayland_build_install() {
+  local xw="$NIRI_DEPS/xwayland"
+  PKG_CONFIG_PATH="$xw/lib/pkgconfig:$NIRI_DEPS/share/pkgconfig" meson setup build --prefix="$xw" \
+      --libdir=lib --buildtype=release -Dc_link_args="-Wl,-rpath,$xw/lib" -Dxvfb=false -Dlibdecor=false \
+      -Dxwayland_eglstream=false -Ddocs=false -Ddevel-docs=false \
+      -Dxkb_dir=/usr/share/X11/xkb -Dxkb_bin_dir=/usr/bin -Dxkb_output_dir=/var/lib/xkb \
+    && ninja -C build \
+    && meson_sudo_install \
+    && sudo ln -sfn "$xw/bin/Xwayland" /usr/local/bin/Xwayland
+}
+
+# 22.04's swayidle (1.7) only speaks KDE's idle protocol, which niri lacks.
+swayidle_build_install() {
+  PKG_CONFIG_PATH="$NIRI_DEPS/share/pkgconfig" meson setup build --buildtype=release -Dman-pages=disabled \
+    && ninja -C build \
+    && sudo install -m 755 build/swayidle /usr/local/bin/swayidle
+}
+
+# fuzzel needs pixman 0.46 (22.04 has 0.40): static, in its own prefix so no
+# other build links it. fcft, its font library, is newer than 22.04's too, so
+# it is built in as a subproject.
+pixman_build_install() {
+  meson setup build --prefix="$NIRI_DEPS/pixman" --libdir=lib --buildtype=release -Ddefault_library=static \
+      -Dtests=disabled -Ddemos=disabled -Dgtk=disabled -Dlibpng=disabled \
+    && ninja -C build \
+    && meson_sudo_install
+}
+
+fuzzel_build_install() {
+  local fcft; fcft=$(tool_pin fcft)
+  [[ -n "$fcft" ]] || { echo "fcft needs a pin in versions"; return 1; }
+  clone_tag "$fcft" https://codeberg.org/dnkl/fcft.git subprojects/fcft \
+    && PKG_CONFIG_PATH="$NIRI_DEPS/pixman/lib/pkgconfig:$NIRI_DEPS/share/pkgconfig" meson setup build \
+      --buildtype=release -Ddefault_library=static -Dfcft:grapheme-shaping=disabled \
+      -Dfcft:run-shaping=disabled -Dfcft:test-text-shaping=false -Dfcft:docs=disabled \
+    && ninja -C build \
+    && sudo install -m 755 build/fuzzel /usr/local/bin/fuzzel
+}
+
+wlsunset_build_install() {
+  meson setup build --buildtype=release -Dman-pages=disabled \
+    && ninja -C build \
+    && sudo install -m 755 build/wlsunset /usr/local/bin/wlsunset
+}
+
+# Builds one of the 22.04 components when it is missing or off its pin. $1 is
+# the versions file key, $2 the repo URL, $3 the tag prefix, $4 the step, $5 a
+# file the install leaves, which must still be there.
+install_old_component() {
+  local key="$1" url="$2" prefix="$3" step="$4" file="$5" want have=""
+  want=$(tool_pin "$key")
+  [[ -n "$want" ]] || { log_error "$key" "needs a pin in versions (the 22.04 builds take no \"latest\")"; return 1; }
+  [[ -e "$file" && -f "$(old_stamp "$key")" ]] && have=$(<"$(old_stamp "$key")")
+  needs_install "$key" "$have" "$want" "$want" || return 0
+  run_spin "building $key $want..." build_github_tag "$key" "$url" "$prefix$want" "$step" \
+    && sudo install -Dm 644 /dev/null "$(old_stamp "$key")" \
+    && printf '%s\n' "$want" | sudo tee "$(old_stamp "$key")" >/dev/null \
+    && log_ok "$key $want installed" \
+    || { log_error "$key" "build failed"; return 1; }
+}
+
+# cliphist publishes static binaries, so no Go toolchain is needed.
+install_cliphist() {
+  local want have tmp="$SCRIPT_TMPDIR/cliphist"
+  want=$(tool_pin cliphist)
+  [[ -n "$want" ]] || { log_error "cliphist" "needs a pin in versions"; return 1; }
+  have=$(command_exists cliphist && cliphist version 2>/dev/null | awk '$1 == "version" { print $2 }')
+  needs_install "cliphist" "$have" "$want" "$want" || return 0
+  run_spin "downloading cliphist $want..." curl -fsSL -o "$tmp" \
+      "https://github.com/sentriz/cliphist/releases/download/v$want/v$want-linux-amd64" \
+    && sudo install -m 755 "$tmp" /usr/local/bin/cliphist \
+    && log_ok "cliphist $want installed in /usr/local/bin" \
+    || { log_error "cliphist" "download failed"; return 1; }
+}
+
+# What niri itself needs, before it is built.
+install_niri_old_deps() {
+  local fd=https://gitlab.freedesktop.org
+  install_old_component wayland-protocols "$fd/wayland/wayland-protocols.git" "" wayland_protocols_build_install \
+      "$NIRI_DEPS/share/pkgconfig/wayland-protocols.pc" \
+    && install_old_component libinput "$fd/libinput/libinput.git" "" libinput_build_install \
+      "$NIRI_DEPS/lib/libinput.so.10" \
+    && install_old_component libdisplay-info "$fd/emersion/libdisplay-info.git" "" libdisplay_info_build_install \
+      "$NIRI_DEPS/lib/libdisplay-info.a"
+}
+
+# The session's tools that 22.04 lacks or has too old.
+install_niri_old_session() {
+  local fd=https://gitlab.freedesktop.org
+  install_old_component libwayland "$fd/wayland/wayland.git" "" libwayland_build_install \
+      "$NIRI_DEPS/xwayland/lib/libwayland-client.so.0" \
+    && install_old_component xwayland "$fd/xorg/xserver.git" xwayland- xwayland_build_install /usr/local/bin/Xwayland
+  install_old_component swayidle https://github.com/swaywm/swayidle.git v swayidle_build_install /usr/local/bin/swayidle
+  install_old_component pixman "$fd/pixman/pixman.git" pixman- pixman_build_install "$NIRI_DEPS/pixman/lib/libpixman-1.a" \
+    && install_old_component fuzzel https://codeberg.org/dnkl/fuzzel.git "" fuzzel_build_install /usr/local/bin/fuzzel
+  install_old_component wlsunset https://git.sr.ht/~kennylevinsen/wlsunset "" wlsunset_build_install /usr/local/bin/wlsunset
+  install_cliphist
 }
 
 # Newest stable version of crate $1 on crates.io (its API wants a User-Agent).
@@ -2696,9 +2890,26 @@ fetch_wallpapers() {
   fi
 }
 
+# snapd-desktop-integration installs theme snaps matching the GTK and icon
+# themes, for snap apps. With Papirus icons it tries at every login, asking for
+# a password. Without its snap-themes-control plug it leaves themes alone and
+# keeps doing the rest; snapd remembers a manual disconnect across refreshes.
+snap_theme_installs_off() {
+  command_exists snap || return 0
+  local slot
+  slot=$(snap connections snapd-desktop-integration 2>/dev/null | awk '$1 == "snap-themes-control" { print $3 }')
+  [[ -n "$slot" && "$slot" != "-" ]] || { log_skip "snap theme installs (off)"; return; }
+  sudo snap disconnect snapd-desktop-integration:snap-themes-control \
+    && log_ok "snap theme installs off (snapd-desktop-integration)" \
+    || log_error "snapd-desktop-integration" "could not disconnect snap-themes-control"
+}
+
 install_niri_desktop() {
-  local missing=() dep
-  for dep in "${NIRI_BUILD_DEPS[@]}" "${WAYBAR_BUILD_DEPS[@]}" "${NIRI_SESSION_PKGS[@]}"; do
+  local missing=() dep pkgs=("${NIRI_BUILD_DEPS[@]}" "${WAYBAR_BUILD_DEPS[@]}" "${NIRI_SESSION_PKGS[@]}")
+  niri_old_ubuntu && pkgs+=("${NIRI_OLD_BUILD_DEPS[@]}")
+  for dep in "${pkgs[@]}"; do
+    # On 22.04, built from source instead (install_niri_old_*).
+    niri_old_ubuntu && [[ " ${NIRI_OLD_NOT_IN_APT[*]} " == *" $dep "* ]] && continue
     pkg_installed "$dep" || missing+=("$dep")
   done
   if (( ${#missing[@]} )); then
@@ -2711,8 +2922,12 @@ install_niri_desktop() {
   [[ -x "$HOME/.cargo/bin/cargo" ]] || install_rust
   command_exists meson || install_uv_tool meson "Meson"
 
+  if niri_old_ubuntu; then
+    install_niri_old_deps || return 1
+  fi
   install_niri_component niri niri-wm/niri v niri_build_install || return 1
   install_niri_component xwayland-satellite Supreeeme/xwayland-satellite v xws_build_install
+  niri_old_ubuntu && install_niri_old_session
   install_niri_component waybar Alexays/Waybar "" waybar_build_install
   install_niri_component swaylock-effects jirutka/swaylock-effects v swaylock_effects_build_install
   install_bluetui
@@ -2727,6 +2942,7 @@ install_niri_desktop() {
   ensure_login_path
   vscode_use_keyring
   default_file_manager
+  snap_theme_installs_off
 }
 
 cmd_niri() {
@@ -3398,6 +3614,14 @@ verify_niri() {
     [[ -n "$v" ]] || { echo "$key missing (run --niri)"; return 1; }
     versions+="$key $v, "
   done
+  if niri_old_ubuntu; then
+    for key in wayland-protocols libinput libdisplay-info libwayland xwayland swayidle pixman fuzzel wlsunset; do
+      [[ -f "$(old_stamp "$key")" ]] || { echo "$key missing (run --niri)"; return 1; }
+    done
+    ldd "$NIRI_BIN" | grep -q "$NIRI_DEPS/lib/libinput" \
+      || { echo "niri doesn't load its libinput from $NIRI_DEPS (run --niri)"; return 1; }
+    versions+="22.04 builds in $NIRI_DEPS, "
+  fi
   "$NIRI_BIN" validate &>/dev/null || { echo ".config/niri/config.kdl does not parse (niri validate)"; return 1; }
   echo "${versions%, }; config valid"
 }
