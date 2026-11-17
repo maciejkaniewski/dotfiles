@@ -16,12 +16,13 @@ state="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/main-output"
 pidfile="${XDG_RUNTIME_DIR:-/tmp}/waybar-launch.pid"
 log="${XDG_CACHE_HOME:-$HOME/.cache}/waybar/waybar.log"
 
-# Connector name (DP-7, eDP-1) of the screen that gets the full bar.
+# Connector name (DP-7, eDP-1) of the screen that gets the full bar. Screens
+# switched off (the laptop's, with the lid closed) don't count.
 pick_main() {
     local want
     want=$(cat "$state" 2>/dev/null)
     niri msg -j outputs | jq -r --arg want "$want" '
-        [.[] | {name, id: "\(.make) \(.model) \(.serial // "Unknown")"}] as $o
+        [.[] | select(.logical != null) | {name, id: "\(.make) \(.model) \(.serial // "Unknown")"}] as $o
         | first(($o[] | select(.id == $want) | .name),
                 ($o[] | select(.name | startswith("eDP")) | .name),
                 ($o | sort_by(.name) | .[].name))'

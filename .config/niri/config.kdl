@@ -169,6 +169,14 @@ spawn-sh-at-startup "exec swaybg -m fill -i ~/.config/niri/wallpaper"
 // .local/bin/lock-screen sets the lock screen's look in one place.
 spawn-sh-at-startup "exec swayidle -w timeout 600 lock-screen timeout 900 'niri msg action power-off-monitors' before-sleep lock-screen"
 
+// Closing the lid switches the laptop's own screen off, so its windows and the
+// bar move to the monitors; opening it switches the screen back on. Undocked,
+// closing the lid suspends as usual (logind) and the screen is back on waking.
+switch-events {
+    lid-close { spawn "sh" "-c" "for o in $(niri msg -j outputs | jq -r '.[].name | select(startswith(\"eDP\"))'); do niri msg output $o off; done"; }
+    lid-open  { spawn "sh" "-c" "for o in $(niri msg -j outputs | jq -r '.[].name | select(startswith(\"eDP\"))'); do niri msg output $o on; done"; }
+}
+
 window-rule {
     geometry-corner-radius 12
     clip-to-geometry true
