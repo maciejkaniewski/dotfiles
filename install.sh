@@ -2514,6 +2514,7 @@ NIRI_LINKS=(
   "niri|$DOTFILES/.local/bin/waybar-io:$HOME/.local/bin/waybar-io"
   "niri|$DOTFILES/.local/bin/waybar-thermal:$HOME/.local/bin/waybar-thermal"
   "niri|$DOTFILES/.local/bin/waybar-cast:$HOME/.local/bin/waybar-cast"
+  "niri|$DOTFILES/.local/bin/launcher-icons:$HOME/.local/bin/launcher-icons"
 )
 # xwayland-satellite has no --version, so the build records what it installed.
 XWS_STAMP=/usr/local/share/dotfiles/xwayland-satellite.version
@@ -2886,102 +2887,19 @@ default_file_manager() {
     || log_error "file manager" "xdg-mime default failed"
 }
 
-# Launchers whose icon fuzzel can't show. It draws PNG and plain SVG only:
-# - an Icon= pointing at an XPM or ICO file (STM32CubeIDE's,
-#   STM32CubeProgrammer's) gets a PNG copy;
-# - an icon name Papirus doesn't have is looked up in the app's own hicolor
-#   and pixmaps files. If the SVG there wraps a bitmap, which fuzzel's SVG
-#   renderer draws blank (DSView's, PrusaSlicer's G-code viewer's), or the
-#   icon is only under /usr/local/share, whose hicolor folder has no
-#   index.theme so fuzzel doesn't find it by name, the launcher gets the
-#   largest PNG there by full path, or a PNG made from the SVG;
-# - ARandR names "display", which Papirus doesn't have as an app icon.
-# Each fix is a copy of the launcher in ~/.local/share/applications, which wins
-# over the system or flatpak one of the same name, marked so a copy whose
-# original is gone is removed again.
-LAUNCHER_ICON_OVERRIDES=(arandr.desktop:preferences-desktop-display)
+# Launchers whose icon fuzzel can't show get a copy that names one it can
+# (.local/bin/launcher-icons, which niri also runs at login).
 launcher_icons() {
-  local apps="$HOME/.local/share/applications" pngs="$HOME/.local/share/icons/dotfiles"
-  local mark="# dotfiles: icon override of" f src icon id want entry b c s size svg png local_only
-  local -a fixed=() cands=() files=()
-  local -a bases=(/usr/share /usr/local/share /var/lib/flatpak/exports/share
-    "$HOME/.local/share/flatpak/exports/share" /var/lib/snapd/desktop)
-  mkdir -p "$apps"
-  for f in "$apps"/*.desktop; do
-    src=$(sed -n "s|^$mark ||p" "$f" 2>/dev/null)
-    [[ -n "$src" && ! -f "$src" ]] && rm -f "$f" "$pngs/${f##*/}.png"
-  done
-  for b in "${bases[@]}" "$HOME/.local/share"; do
-    for f in "$b"/applications/*.desktop; do files+=("$f"); done
-  done
-  for f in "${files[@]}"; do
-    [[ -f "$f" ]] || continue
-    id=${f##*/}
-    # Hidden from launchers, or already copied (the copy is checked instead).
-    grep -qx 'NoDisplay=true' "$f" && continue
-    [[ "$f" != "$apps"/* && -f "$apps/$id" ]] && continue
-    icon=$(sed -n 's/^Icon=//p' "$f" | head -1)
-    want="" src=""
-    for entry in "${LAUNCHER_ICON_OVERRIDES[@]}"; do
-      [[ "$id" == "${entry%%:*}" && "$icon" != "${entry#*:}" ]] && want=${entry#*:}
-    done
-    if [[ -z "$want" && -n "$icon" && "$icon" != */* ]] \
-      && ! compgen -G "/usr/share/icons/Papirus/*/*/$icon.svg" >/dev/null; then
-      cands=() svg="" png="" size=0 local_only=1
-      for b in "${bases[@]}"; do
-        for c in "$b"/icons/hicolor/*/apps/"$icon".{svg,png} "$b"/pixmaps/"$icon".{svg,png}; do
-          [[ -f "$c" ]] && cands+=("$c")
-        done
-      done
-      for c in "${cands[@]}"; do
-        [[ "$c" == /usr/local/* ]] || local_only=0
-        case $c in
-          *.svg) [[ -n "$svg" ]] || svg=$c ;;
-          */pixmaps/*) [[ -n "$png" ]] || png=$c ;;
-          *) s=${c%/apps/*}; s=${s##*/}; s=${s%%x*}
-             [[ "$s" =~ ^[0-9]+$ ]] && (( s > size )) && size=$s png=$c ;;
-        esac
-      done
-      if (( ${#cands[@]} )) && { (( local_only )) || { [[ -n "$svg" ]] && grep -q '<image' "$svg"; }; }; then
-        if [[ -n "$png" ]] && { (( size >= 128 )) || [[ -z "$svg" ]]; }; then
-          want=$png
-        else
-          src=$svg
-        fi
-      fi
-    fi
-    if [[ -z "$want" && -z "$src" && -f "$icon" ]]; then
-      case $icon in
-        /*.xpm|/*.ico) src=$icon ;;
-        /*.svg) grep -q '<image' "$icon" && src=$icon ;;
-      esac
-    fi
-    if [[ -n "$src" ]]; then
-      mkdir -p "$pngs"
-      want="$pngs/$id.png"
-      python3 -c '
-import sys
-src, dst = sys.argv[1:]
-if src.endswith(".svg"):
-    import gi
-    gi.require_version("GdkPixbuf", "2.0")
-    from gi.repository import GdkPixbuf
-    GdkPixbuf.Pixbuf.new_from_file_at_scale(src, 256, 256, True).savev(dst, "png", [], [])
-else:
-    from PIL import Image
-    Image.open(src).convert("RGBA").save(dst)' "$src" "$want" 2>/dev/null \
-        || { log_error "launcher icons" "could not convert $src"; continue; }
-    fi
-    [[ -n "$want" ]] || continue
-    if [[ "$f" == "$apps"/* ]]; then
-      sed -i "s|^Icon=.*|Icon=$want|" "$f"
-    else
-      { echo "$mark $f"; sed "s|^Icon=.*|Icon=$want|" "$f"; } > "$apps/$id"
-    fi
-    fixed+=("$(sed -n 's/^Name=//p' "$f" | head -1)")
-  done
-  if (( ${#fixed[@]} )); then
-    log_ok "launcher icons: ${fixed[*]}"
+  local fixed err
+  err=$(mktemp)
+  fixed=$("$DOTFILES/.local/bin/launcher-icons" 2>"$err")
+  if [[ -s "$err" ]]; then
+    SPIN_ERR_DETAIL=$(<"$err")
+    log_error "launcher icons" "some icons could not be converted"
+  fi
+  rm -f "$err"
+  if [[ -n "$fixed" ]]; then
+    log_ok "launcher icons: ${fixed//$'\n'/, }"
   else
     log_skip "launcher icons"
   fi
@@ -3314,9 +3232,10 @@ apply_theme() {
     write_gtk3_settings
   fi
 
-  # niri reloads its own config; a running Waybar and mako need telling, and
-  # swaybg restarting on the new wallpaper (through niri, so it stays in the
-  # session rather than tied to this terminal).
+  # niri reloads its own config; open kitty windows, a running Waybar and mako
+  # need telling, and swaybg restarting on the new wallpaper (through niri, so
+  # it stays in the session rather than tied to this terminal).
+  pkill -USR1 -x kitty 2>/dev/null
   pkill -USR2 -x waybar 2>/dev/null
   command_exists makoctl && makoctl reload &>/dev/null
   if [[ -n "$NIRI_SOCKET" ]] && pgrep -x swaybg >/dev/null; then

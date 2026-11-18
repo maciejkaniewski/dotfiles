@@ -147,6 +147,9 @@ spawn-at-startup "mako"
 spawn-sh-at-startup "GDK_BACKEND=x11 exec /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1"
 // Low-battery warnings (15%, 5%) and power-saver at 20%, as GNOME gave.
 spawn-at-startup "battery-notify"
+// Launchers whose icon fuzzel can't show, fixed for apps installed since the
+// last login (.local/bin/launcher-icons).
+spawn-at-startup "launcher-icons"
 // A notification whenever a USB serial adapter is plugged in or out.
 spawn-at-startup "ports" "--notify"
 // Clipboard history for Super+Shift+C: text and images, as they're copied.
