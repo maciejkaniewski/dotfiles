@@ -22,6 +22,10 @@ vim.opt.foldmethod = "indent"
 vim.opt.foldlevel = 99
 vim.opt.foldlevelstart = 99
 vim.opt.foldcolumn = "1"
+-- The fold column shows only "-" where a fold starts and "+" on a closed one:
+-- no bar down an open fold, and no digits for the depth of nested ones, which
+-- the one-wide column would otherwise show.
+vim.opt.fillchars:append({ foldsep = " ", foldinner = " " })
 vim.opt.foldtext = ""
 
 -- Behaviour
