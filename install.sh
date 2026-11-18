@@ -2899,6 +2899,31 @@ fetch_wallpapers() {
   fi
 }
 
+# Ubuntu 22.04's mako (1.6) ships an AppArmor profile under which it can't
+# run: it may read only ~/.config/mako/config itself, not the theme file in
+# this repo that it links to, and may not claim the notification service on
+# D-Bus. mako quit at login, so no notification or OSD showed. The profile's
+# local override allows both, and nothing more.
+mako_apparmor_allow() {
+  local profile=/etc/apparmor.d/fr.emersion.Mako local=/etc/apparmor.d/local/fr.emersion.Mako
+  local rules="# dotfiles (install.sh): mako's config links to a theme file in the repo,
+# and the shipped profile lets it neither read that nor claim the
+# notification service, so mako can't start at all.
+owner $DOTFILES/.config/mako/*.conf r,
+dbus send bus=session path=/org/freedesktop/DBus interface=org.freedesktop.DBus member={RequestName,ReleaseName} peer=(name=org.freedesktop.DBus),
+dbus (send, receive) bus=session path=/org/freedesktop/Notifications,
+dbus (send, receive) bus=session path=/fr/emersion/Mako,"
+  [[ -f "$profile" ]] || return 0
+  if [[ "$(cat "$local" 2>/dev/null)" == "$rules" ]]; then
+    log_skip "mako AppArmor (allowed)"
+    return
+  fi
+  echo "$rules" | sudo tee "$local" >/dev/null \
+    && sudo apparmor_parser -r "$profile" \
+    && log_ok "mako AppArmor: may read its theme files and run the notification service" \
+    || log_error "mako" "could not extend its AppArmor profile ($local)"
+}
+
 # snapd-desktop-integration installs theme snaps matching the GTK and icon
 # themes, for snap apps. With Papirus icons it tries at every login, asking for
 # a password. Without its snap-themes-control plug it leaves themes alone and
@@ -2952,6 +2977,7 @@ install_niri_desktop() {
   vscode_use_keyring
   default_file_manager
   snap_theme_installs_off
+  mako_apparmor_allow
 }
 
 cmd_niri() {

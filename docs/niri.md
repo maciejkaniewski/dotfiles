@@ -29,6 +29,7 @@ Then log out, pick niri from the gear on the login screen, and press `Super+Shif
 - **X11 apps** need Xwayland 23.1 (22.04 has 22.1), built into `/opt/niri-deps/xwayland` with the libwayland it needs, and linked as `/usr/local/bin/Xwayland`. GNOME starts `/usr/bin/Xwayland` by its full path, so it keeps its own.
 - **Waybar** builds with a newer wayland-protocols (in `/opt/niri-deps`), its own fmt and spdlog, and `patches/waybar/` for 22.04's gcc 11.
 - **Built into `/usr/local/bin`**, as 22.04 lacks them or has them too old: fuzzel (with pixman 0.46 and fcft built in), swayidle (22.04's speaks only KDE's idle protocol), wlsunset, and cliphist (its released binary).
+- **mako's AppArmor profile** (22.04's mako 1.6) lets it read only `~/.config/mako/config` itself, not the theme file in this repo that it links to, and doesn't let it claim the notification service on D-Bus, so mako quit at login and no notification or volume pop-up showed. `--niri` allows those two in the profile's local override, `/etc/apparmor.d/local/fr.emersion.Mako`.
 
 Each of these leaves a stamp in `/usr/local/share/dotfiles/`, so `--setup` rebuilds one only when its pin moves; deleting a stamp rebuilds it on the next run.
 
