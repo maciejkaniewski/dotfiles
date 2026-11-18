@@ -221,20 +221,14 @@ layer-rule {
     }
 }
 
-// Waybar and notifications are frosted glass: translucent, with the windows
-// and wallpaper behind them blurred. The radius keeps the blur inside their
-// rounded corners. Waybar names its layers after its bars, main and side.
+// Waybar is frosted glass: translucent, with the windows and wallpaper behind
+// it blurred. The radius keeps the blur inside its rounded corners. Waybar
+// names its layers after its bars, main and side. Notifications have no blur:
+// mako's surface includes the margin around each one, so the blur showed as a
+// wide frosted frame outside its border. They're less see-through instead.
 layer-rule {
     match namespace="^(main|side)$"
     geometry-corner-radius 14
-    background-effect {
-        blur true
-    }
-}
-
-layer-rule {
-    match namespace="^notifications$"
-    geometry-corner-radius 12
     background-effect {
         blur true
     }
