@@ -436,7 +436,7 @@ binds {
     Mod+F       { maximize-column; }
     Mod+Shift+F { fullscreen-window; }
     // Hide or show Waybar; windows take the space while it's hidden.
-    Mod+B hotkey-overlay-title="Hide or show the bar" { spawn "pkill" "-USR1" "-x" "waybar"; }
+    Mod+B hotkey-overlay-title="Hide or show the bar" { spawn "waybar-launch" "--toggle"; }
     // The focused screen gets the full bar (system readouts, tray, controls).
     Mod+Shift+B hotkey-overlay-title="Make this the main bar's screen" { spawn "waybar-launch" "--set-main"; }
     Mod+Ctrl+F  { expand-column-to-available-width; }

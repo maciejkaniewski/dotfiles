@@ -6,15 +6,20 @@
 #                              come or go (the niri session runs this at login)
 #   waybar-launch --set-main   make the focused screen the main one
 #                              (Super+Shift+B)
+#   waybar-launch --toggle     hide or show the bars (Super+B)
 #
 # The main screen is remembered in ~/.config/waybar/main-output, machine-local,
 # by make, model and serial, so it doesn't matter which dock port it's in.
 # When that screen isn't connected, the laptop's own takes the full bar, then
 # whichever comes first. Waybar's output goes to ~/.cache/waybar/waybar.log.
+#
+# Hiding stops Waybar rather than using its own SIGUSR1 toggle: that leaves
+# a transparent bar in place, and niri's blur rule still frosts its area.
 
 state="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/main-output"
 pidfile="${XDG_RUNTIME_DIR:-/tmp}/waybar-launch.pid"
 log="${XDG_CACHE_HOME:-$HOME/.cache}/waybar/waybar.log"
+hidden="${XDG_RUNTIME_DIR:-/tmp}/waybar-hidden"
 
 # Connector name (DP-7, eDP-1) of the screen that gets the full bar. Screens
 # switched off (the laptop's, with the lid closed) don't count.
@@ -28,9 +33,15 @@ pick_main() {
                 ($o | sort_by(.name) | .[].name))'
 }
 
-if [[ $1 == --set-main ]]; then
-    mkdir -p "${state%/*}"
-    niri msg -j focused-output | jq -r '"\(.make) \(.model) \(.serial // "Unknown")"' > "$state"
+if [[ $1 == --set-main || $1 == --toggle ]]; then
+    if [[ $1 == --set-main ]]; then
+        mkdir -p "${state%/*}"
+        niri msg -j focused-output | jq -r '"\(.make) \(.model) \(.serial // "Unknown")"' > "$state"
+    elif [[ -e $hidden ]]; then
+        rm -f "$hidden"
+    else
+        : > "$hidden"
+    fi
     pid=$(cat "$pidfile" 2>/dev/null)
     [[ -n $pid ]] && kill -USR1 "$pid" 2>/dev/null
     exit 0
@@ -43,6 +54,7 @@ echo $$ > "$pidfile"
 start() {
     pkill -x waybar
     while pgrep -x waybar >/dev/null; do sleep 0.1; done
+    [[ -e $hidden ]] && return
     mkdir -p "${log%/*}"
     # 9>&-: Waybar mustn't hold the lock, or a new watcher couldn't start
     # while it runs.
@@ -53,13 +65,13 @@ trap start USR1
 start
 screens=""
 # niri reports docking and undocking as workspaces moving between screens.
-# Every 5 s without an event (or on --set-main's signal), check Waybar is
-# still there: one that quit, say on a reload that found its theme file
-# missing, comes back on its own.
+# Every 5 s without an event (or on a --set-main or --toggle signal), check
+# Waybar is still there: one that quit, say on a reload that found its theme
+# file missing, comes back on its own, unless the bars are hidden.
 while :; do
     IFS= read -r -t 5 event; rc=$?
     if (( rc > 128 )); then
-        pgrep -x waybar >/dev/null || start
+        [[ -e $hidden ]] || pgrep -x waybar >/dev/null || start
         continue
     fi
     (( rc == 0 )) || break
@@ -68,7 +80,7 @@ while :; do
     if [[ $now != "$screens" ]]; then
         [[ -n $screens ]] && start
         screens=$now
-    elif ! pgrep -x waybar >/dev/null; then
+    elif [[ ! -e $hidden ]] && ! pgrep -x waybar >/dev/null; then
         start                    # Waybar died; bring it back
     fi
 done < <(niri msg -j event-stream 9>&-)
