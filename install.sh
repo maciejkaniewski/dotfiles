@@ -2886,6 +2886,52 @@ default_file_manager() {
     || log_error "file manager" "xdg-mime default failed"
 }
 
+# Launchers whose icon fuzzel can't show. It draws PNG and SVG only, so an
+# Icon= pointing at an XPM file (STM32CubeIDE's) gets a PNG copy; ARandR names
+# "display", which Papirus doesn't have as an app icon. Each fix is a copy of
+# the launcher in ~/.local/share/applications, which wins over the system one
+# of the same name, marked so a copy whose original is gone is removed again.
+LAUNCHER_ICON_OVERRIDES=(arandr.desktop:preferences-desktop-display)
+launcher_icons() {
+  local apps="$HOME/.local/share/applications" pngs="$HOME/.local/share/icons/dotfiles"
+  local mark="# dotfiles: icon override of" f src icon id want entry fixed=()
+  mkdir -p "$apps"
+  for f in "$apps"/*.desktop; do
+    src=$(sed -n "s|^$mark ||p" "$f" 2>/dev/null)
+    [[ -n "$src" && ! -f "$src" ]] && rm -f "$f" "$pngs/${f##*/}.png"
+  done
+  for f in /usr/share/applications/*.desktop "$apps"/*.desktop; do
+    [[ -f "$f" ]] || continue
+    id=${f##*/}
+    # Hidden from launchers, or already copied (the copy is checked instead).
+    grep -qx 'NoDisplay=true' "$f" && continue
+    [[ "$f" == /usr/* && -f "$apps/$id" ]] && continue
+    icon=$(sed -n 's/^Icon=//p' "$f" | head -1)
+    want=""
+    for entry in "${LAUNCHER_ICON_OVERRIDES[@]}"; do
+      [[ "$id" == "${entry%%:*}" && "$icon" != "${entry#*:}" ]] && want=${entry#*:}
+    done
+    if [[ -z "$want" && "$icon" == /*.xpm && -f "$icon" ]]; then
+      mkdir -p "$pngs"
+      want="$pngs/$id.png"
+      python3 -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).convert("RGBA").save(sys.argv[2])' \
+        "$icon" "$want" 2>/dev/null || { log_error "launcher icons" "could not convert $icon"; continue; }
+    fi
+    [[ -n "$want" ]] || continue
+    if [[ "$f" == "$apps"/* ]]; then
+      sed -i "s|^Icon=.*|Icon=$want|" "$f"
+    else
+      { echo "$mark $f"; sed "s|^Icon=.*|Icon=$want|" "$f"; } > "$apps/$id"
+    fi
+    fixed+=("$(sed -n 's/^Name=//p' "$f" | head -1)")
+  done
+  if (( ${#fixed[@]} )); then
+    log_ok "launcher icons: ${fixed[*]}"
+  else
+    log_skip "launcher icons"
+  fi
+}
+
 # The community wallpapers (.config/niri/wallpapers/sources), recoloured for
 # each theme variant into ~/.local/share/wallpapers; ones already made are
 # kept. Not fatal: the themes' own glow wallpapers need no download.
@@ -2976,6 +3022,7 @@ install_niri_desktop() {
   ensure_login_path
   vscode_use_keyring
   default_file_manager
+  launcher_icons
   snap_theme_installs_off
   mako_apparmor_allow
 }
