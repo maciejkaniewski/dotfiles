@@ -104,9 +104,7 @@ window#waybar.side #workspaces button {
 #cpu                     { color: @cpu; }
 #memory                  { color: @mem; }
 #custom-io               { color: @net; }
-#custom-io.warning       { color: @bg; background: @temp; border-radius: 8px; }
 #custom-thermal          { color: @temp; }
-#custom-thermal.critical { color: @bg; background: @temp; border-radius: 8px; }
 #custom-serial           { color: @date; }
 
 #idle_inhibitor           { color: @overlay; }
