@@ -28,13 +28,6 @@ cursor {
 
 layout {
     gaps 24
-    // Space at the screen's left and right edges that windows don't fill, so
-    // a sliver of the columns either side peeks in: a hint there's more off
-    // screen.
-    struts {
-        left 16
-        right 16
-    }
     center-focused-column "never"
     preset-column-widths {
         proportion 0.33333
