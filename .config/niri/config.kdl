@@ -197,7 +197,7 @@ window-rule {
     }
 }
 
-// kitty's background is 95% opaque; blur what shows through it, like
+// kitty's background is 85% opaque; blur what shows through it, like
 // blur-my-shell does under GNOME.
 window-rule {
     match app-id="^kitty$"
