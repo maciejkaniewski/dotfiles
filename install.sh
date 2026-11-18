@@ -3679,6 +3679,14 @@ verify_niri() {
       || { echo "niri doesn't load its libinput from $NIRI_DEPS (run --niri)"; return 1; }
     versions+="22.04 builds in $NIRI_DEPS, "
   fi
+  # A script or config added to NIRI_LINKS since the last --niri isn't linked
+  # yet, and niri's spawn-at-startup of a missing script fails silently.
+  local entry section_l src dst missing=""
+  for entry in "${NIRI_LINKS[@]}"; do
+    link_parts "$entry" section_l src dst
+    [[ "$(readlink "$dst")" == "$src" ]] || missing+="${dst/#$HOME/\~} "
+  done
+  [[ -z "$missing" ]] || { echo "not linked: ${missing% } (run --niri)"; return 1; }
   "$NIRI_BIN" validate &>/dev/null || { echo ".config/niri/config.kdl does not parse (niri validate)"; return 1; }
   echo "${versions%, }; config valid"
 }
