@@ -2886,15 +2886,20 @@ default_file_manager() {
     || log_error "file manager" "xdg-mime default failed"
 }
 
-# Launchers whose icon fuzzel can't show. It draws PNG and SVG only, so an
-# Icon= pointing at an XPM file (STM32CubeIDE's) gets a PNG copy; ARandR names
-# "display", which Papirus doesn't have as an app icon. Each fix is a copy of
-# the launcher in ~/.local/share/applications, which wins over the system one
-# of the same name, marked so a copy whose original is gone is removed again.
+# Launchers whose icon fuzzel can't show. It draws PNG and plain SVG only, so
+# an Icon= pointing at an XPM or ICO file (STM32CubeIDE's,
+# STM32CubeProgrammer's) gets a PNG copy. An icon installed only under
+# /usr/local/share (DSView's) fuzzel doesn't find by name, its hicolor folder
+# having no index.theme, so the launcher gets its full path, and a PNG copy if
+# it's an SVG: DSView's wraps a bitmap, which fuzzel's SVG renderer leaves
+# blank. ARandR names "display", which Papirus doesn't have as an app icon.
+# Each fix is a copy of the launcher in ~/.local/share/applications, which wins
+# over the system one of the same name, marked so a copy whose original is gone
+# is removed again.
 LAUNCHER_ICON_OVERRIDES=(arandr.desktop:preferences-desktop-display)
 launcher_icons() {
   local apps="$HOME/.local/share/applications" pngs="$HOME/.local/share/icons/dotfiles"
-  local mark="# dotfiles: icon override of" f src icon id want entry fixed=()
+  local mark="# dotfiles: icon override of" f src icon local_icon id want entry fixed=()
   mkdir -p "$apps"
   for f in "$apps"/*.desktop; do
     src=$(sed -n "s|^$mark ||p" "$f" 2>/dev/null)
@@ -2911,11 +2916,31 @@ launcher_icons() {
     for entry in "${LAUNCHER_ICON_OVERRIDES[@]}"; do
       [[ "$id" == "${entry%%:*}" && "$icon" != "${entry#*:}" ]] && want=${entry#*:}
     done
-    if [[ -z "$want" && "$icon" == /*.xpm && -f "$icon" ]]; then
+    if [[ -z "$want" && -n "$icon" && "$icon" != */* ]]; then
+      local_icon=$(compgen -G "/usr/local/share/icons/hicolor/scalable/apps/$icon.svg" \
+        || compgen -G "/usr/local/share/icons/hicolor/256x256/apps/$icon.png" \
+        || compgen -G "/usr/local/share/pixmaps/$icon.[ps][nv]g")
+      [[ -n "$local_icon" ]] \
+        && ! compgen -G "/usr/share/icons/*/*/apps/$icon.*" >/dev/null \
+        && ! compgen -G "/usr/share/pixmaps/$icon.*" >/dev/null \
+        && icon=${local_icon%%$'\n'*}
+      [[ "$icon" == /usr/local/*.png ]] && want=$icon
+    fi
+    if [[ -z "$want" && ( "$icon" == /*.xpm || "$icon" == /*.ico || "$icon" == /usr/local/*.svg ) && -f "$icon" ]]; then
       mkdir -p "$pngs"
       want="$pngs/$id.png"
-      python3 -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).convert("RGBA").save(sys.argv[2])' \
-        "$icon" "$want" 2>/dev/null || { log_error "launcher icons" "could not convert $icon"; continue; }
+      python3 -c '
+import sys
+src, dst = sys.argv[1:]
+if src.endswith(".svg"):
+    import gi
+    gi.require_version("GdkPixbuf", "2.0")
+    from gi.repository import GdkPixbuf
+    GdkPixbuf.Pixbuf.new_from_file_at_scale(src, 256, 256, True).savev(dst, "png", [], [])
+else:
+    from PIL import Image
+    Image.open(src).convert("RGBA").save(dst)' "$icon" "$want" 2>/dev/null \
+        || { log_error "launcher icons" "could not convert $icon"; continue; }
     fi
     [[ -n "$want" ]] || continue
     if [[ "$f" == "$apps"/* ]]; then
