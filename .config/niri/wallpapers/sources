@@ -1,27 +1,56 @@
 # Wallpapers from each theme's community collection, which `wallpaper --fetch`
-# (run by ./install.sh --niri) downloads and blurs into
-# ~/.local/share/wallpapers/{family}/, machine-local. Only this list is in the
+# (run by ./install.sh --niri) downloads once and recolours into every variant
+# of its family (catppuccin: frappe, macchiato, mocha), each in
+# ~/.local/share/wallpapers/{variant}/, machine-local. Only this list is in the
 # repo: the images are other people's work, under their collections' terms.
 # Super+Alt+W cycles through the theme's own glow wallpaper ({variant}.svg
-# here) and its family's blurred ones.
+# here) and its variant's recoloured ones. Paths may hold spaces. The family
+# column says which variants an image is made for, not where it comes from:
+# Dracula's own collection is mostly distro logos, so it borrows from others.
 #
-# family      repo@commit                                                         path in the repo
-catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  landscapes/evening-sky.png
-catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  landscapes/Cloudsnight.jpg
-catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  landscapes/salty_mountains.png
-catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  landscapes/shaded_landscape.png
-catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  waves/wavy_lines_v01_5120x2880.png
-catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  misc/lonely-fish.png
-catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e  landscapes/yosemite.png
-dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303              second-collection/soft-waves/dracula-soft-waves-bd93f9.png
-dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303              second-collection/soft-waves/dracula-soft-waves-ff79c6.png
-dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303              second-collection/waves/dracula-waves-bd93f9.png
-dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303              second-collection/illustrations/trees-and-mountains/dracula-mnt-bd93f9.png
-dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303              second-collection/illustrations/trees-and-mountains/dracula-mnt-ff79c6.png
-dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303              second-collection/leaves/dracula-leaves-bd93f9.png
-gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e  wallpapers/minimalistic/sunset.png
-gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e  wallpapers/minimalistic/gruvb_solarsys.png
-gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e  wallpapers/vector graphics/chillhop.com-cosy_retreat_sunset.png
-gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e  wallpapers/renders/3d_gruvbox.png
-gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e  wallpapers/photography/sunforest.jpg
-gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e  wallpapers/photography/lake.png
+# family      repo@commit                                                               path in the repo
+catppuccin    SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Abstract & Artistic/galaxy-waves.jpg
+catppuccin    SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Nature & Landscapes/horizon.jpg
+catppuccin    SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Seasonal & Weather/misty-boat.jpg
+catppuccin    SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Nature & Landscapes/mountain-range.jpg
+catppuccin    SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Nature & Landscapes/purple-horizon.jpg
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e   landscapes/Clearnight.jpg
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e   landscapes/Cloudsnight.jpg
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e   landscapes/evening-sky.png
+catppuccin    SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Nature & Landscapes/lit-up-sky.png
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e   landscapes/Rainnight.jpg
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e   landscapes/salty_mountains.png
+catppuccin    zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e   waves/Waves Dark 6016x6016.jpg
+catppuccin    SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Space & Cosmic/eclipse.jpg
+catppuccin    SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Nature & Landscapes/dark-forest.jpg
+catppuccin    SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Abstract & Artistic/trippy-purple.png
+dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303                second-collection/illustrations/trees-and-mountains/dracula-mnt-bd93f9.png
+dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303                second-collection/illustrations/trees-and-mountains/dracula-mnt-ff79c6.png
+dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303                second-collection/leaves/dracula-leaves-bd93f9.png
+dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303                second-collection/illustrations/cat-and-bats/dracula-cat-ff79c6.png
+dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303                second-collection/illustrations/galaxy/dracula-galaxy-bd93f9.png
+dracula       dracula/wallpaper@f2b8cc4223bcc2dfd5f165ab80f701bbb84e3303                second-collection/spooky-minimal/dracula-spooky-bd93f9.png
+dracula       SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Space & Cosmic/puffy-stars.jpg
+dracula       SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Nature & Landscapes/flying-comets-clouds.jpg
+dracula       SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Abstract & Artistic/abstract-swirls.jpg
+dracula       zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e   landscapes/shaded_landscape.png
+dracula       zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e   landscapes/tropic_island_night.jpg
+dracula       zhichaoh/catppuccin-wallpapers@1023077979591cdeca76aae94e0359da1707a60e   misc/comfy-home.png
+dracula       SleepyCatHey/CozyPixels@e5eec73772ee690fccbbf279cf5a2dff15887bda          Catppuccin/Nature & Landscapes/excalibur-lake.jpg
+dracula       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/photography/forest-foggy-misty-cloudy.png
+dracula       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/photography/mountain_at_dusk.jpg
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/minimalistic/sunset.png
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/minimalistic/gruvb_solarsys.png
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/vector graphics/chillhop.com-cosy_retreat_sunset.png
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/renders/3d_gruvbox.png
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/photography/sunforest.jpg
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/photography/lake.png
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/photography/sunset-beach.jpg
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/photography/canyon.jpg
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/vector graphics/dryhope-White_Oak.jpg
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/renders/4.jpg
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/renders/5.jpg
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/minimalistic/solar-system.jpg
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/photography/morning-field.png
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/photography/mountain-village.png
+gruvbox       AngelJumbo/gruvbox-wallpapers@6aa74cbd65973e1a2a8695e83a58ce3ea634dd5e    wallpapers/photography/forest-river.jpg

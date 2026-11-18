@@ -3,67 +3,135 @@
 #
 #   wallpaper           the next one for the current theme (Super+Alt+W)
 #   wallpaper prev      the previous one
-#   wallpaper --fetch   download and blur the community wallpapers listed in
-#                       .config/niri/wallpapers/sources (./install.sh --niri
-#                       runs this); ones already there are skipped
+#   wallpaper --fetch   download the community wallpapers listed in
+#                       .config/niri/wallpapers/sources and make each theme
+#                       variant's copies (./install.sh --niri runs this);
+#                       ones already made are skipped
 #
 # A theme's wallpapers are its own glow, .config/niri/wallpapers/{variant}.svg,
-# then its family's community ones, blurred into soft fields of their colours
-# in ~/.local/share/wallpapers/{family}/ (catppuccin, gruvbox, dracula).
-# ~/.config/niri/wallpaper points at the one in use: swaybg draws it,
-# lock-screen shows it, and the theme picker keeps it when you switch between
-# variants of the same family.
+# then its family's community ones, recoloured into that glow's colours and
+# blurred into soft fields, in ~/.local/share/wallpapers/{variant}/ (frappe,
+# macchiato, mocha, gruvbox-dark, dracula). ~/.config/niri/wallpaper points at
+# the one in use: swaybg draws it, lock-screen shows it, and the theme picker
+# keeps the same picture when you switch between variants of a family.
 
 link="$HOME/.config/niri/wallpaper"
 repo_dir="$(cd "$(dirname "$(readlink -f "$0")")/../../.config/niri/wallpapers" && pwd)"
 store="${XDG_DATA_HOME:-$HOME/.local/share}/wallpapers"
+# Written into each variant's folder. Change it when the processing changes,
+# and --fetch remakes the images instead of keeping the old ones.
+style="glow-recolour 2"
 
-# Downloads each listed image and writes a blurred 2560×1440 JPEG of it:
-# shrunk, blurred, dimmed to about the glow wallpapers' brightness (bright
-# ones more), with a touch of grain so the gradients don't band.
+# The family a variant's glow belongs to: catppuccin, gruvbox or dracula.
+family_of() {
+    case $1 in
+        gruvbox-*) echo gruvbox ;;
+        dracula)   echo dracula ;;
+        *)         echo catppuccin ;;
+    esac
+}
+
+# Downloads each listed image once and writes a 2560×1440 JPEG of it for every
+# variant of its family: brightened or dimmed toward the variant's base colour,
+# each pixel recoloured into a mix of the glow's colours, laid over the base
+# so the accents read as glows, blurred, with a touch of grain so the
+# gradients don't band.
 fetch() {
-    local family spec path name out url tmp ok=0 failed=0
+    local svg stub family spec path name url tmp cur ok=0 failed=0 outs
+    local -A stubs=()
+    for svg in "$repo_dir"/*.svg; do
+        stub=${svg##*/}; stub=${stub%.svg}
+        family=$(family_of "$stub")
+        stubs[$family]+="$stub "
+        # A folder made with other settings (or before folders were per
+        # variant: dracula was a family folder) starts again.
+        if [[ $(cat "$store/$stub/.style" 2>/dev/null) != "$style" ]]; then
+            rm -rf "${store:?}/$stub"
+            mkdir -p "$store/$stub" && echo "$style" > "$store/$stub/.style"
+        fi
+    done
+    # The per-family folders from before.
+    for family in catppuccin gruvbox; do
+        [[ -d $store/$family && ! -e $repo_dir/$family.svg ]] && rm -rf "${store:?}/$family"
+    done
     tmp=$(mktemp -d) || return 1
     while read -r family spec path; do
         [[ -z $family || $family == \#* ]] && continue
         name=${path##*/}; name=${name%.*}
-        out="$store/$family/$name.jpg"
-        [[ -s $out ]] && continue
-        url="https://raw.githubusercontent.com/${spec%@*}/${spec#*@}/${path// /%20}"
-        mkdir -p "$store/$family"
-        if curl -fsSL "$url" -o "$tmp/src" && python3 - "$tmp/src" "$out.tmp" <<'EOF' && mv "$out.tmp" "$out"; then
-import sys
+        outs=()
+        for stub in ${stubs[$family]}; do
+            [[ -s $store/$stub/$name.jpg ]] || outs+=("$repo_dir/$stub.svg" "$store/$stub/$name.jpg")
+        done
+        (( ${#outs[@]} )) || continue
+        url=${path//&/%26}; url=${url// /%20}
+        url="https://raw.githubusercontent.com/${spec%@*}/${spec#*@}/$url"
+        if curl -fsSL "$url" -o "$tmp/src" && python3 - "$tmp/src" "${outs[@]}" <<'EOF'; then
+import math, os, re, sys
 from PIL import Image, ImageFilter, ImageStat
-src, out = sys.argv[1], sys.argv[2]
-im = Image.open(src).convert("RGB")
+
+def lum(c):
+    return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255
+
+def recolour(im, pal, sigma=45):
+    """Each pixel becomes a Gaussian-weighted mix of the palette's colours."""
+    s2 = 2 * sigma * sigma
+    cache, out = {}, []
+    for px in im.getdata():
+        key = (px[0] >> 2, px[1] >> 2, px[2] >> 2)
+        hit = cache.get(key)
+        if hit is None:
+            ws = [math.exp(-sum((a - b) ** 2 for a, b in zip(px, p)) / s2) for p in pal]
+            tot = sum(ws) or 1e-9
+            hit = cache[key] = tuple(int(sum(w * p[i] for w, p in zip(ws, pal)) / tot) for i in range(3))
+        out.append(hit)
+    res = Image.new("RGB", im.size)
+    res.putdata(out)
+    return res
+
+im = Image.open(sys.argv[1]).convert("RGB")
 # Crop to 16:9 from the middle.
 if im.width / im.height > 16 / 9:
     w = im.height * 16 // 9; x = (im.width - w) // 2; im = im.crop((x, 0, x + w, im.height))
 else:
     h = im.width * 9 // 16; y = (im.height - h) // 2; im = im.crop((0, y, im.width, y + h))
-small = im.resize((320, 180), Image.LANCZOS).filter(ImageFilter.GaussianBlur(14))
-mean = ImageStat.Stat(small.convert("L")).mean[0] / 255
-scale = min(0.7, 0.17 / max(mean, 0.01))
-small = small.point(lambda v: int(v * scale))
-big = small.resize((2560, 1440), Image.BICUBIC)
-grain = Image.effect_noise((2560, 1440), 24).convert("RGB")
-Image.blend(big, grain, 0.025).save(out, "JPEG", quality=92)
+small = im.resize((320, 180), Image.LANCZOS).filter(ImageFilter.GaussianBlur(2))
+mean = ImageStat.Stat(small.convert("L")).mean[0]
+args = sys.argv[2:]
+for svg, out in zip(args[::2], args[1::2]):
+    # The glow's colours, darkest first: crust, base, then the accents.
+    hexes = set(re.findall(r"#[0-9a-f]{6}", open(svg).read().lower()))
+    pal = sorted((tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) for h in hexes), key=lum)
+    base = pal[1] if len(pal) > 1 else pal[0]
+    # Brightness first, so the recolouring decides the final colours.
+    scale = max(0.35, min(1.6, lum(base) * 255 * 2.2 / max(mean, 1)))
+    v = recolour(small.point(lambda c: min(255, int(c * scale))), pal)
+    v = Image.blend(Image.new("RGB", v.size, base), v, 0.75).filter(ImageFilter.GaussianBlur(14))
+    big = v.resize((2560, 1440), Image.BICUBIC)
+    grain = Image.effect_noise(big.size, 24).convert("RGB")
+    Image.blend(big, grain, 0.025).save(out + ".tmp", "JPEG", quality=92)
+    os.replace(out + ".tmp", out)
 EOF
             ok=$((ok + 1))
         else
-            rm -f "$out.tmp"; failed=$((failed + 1))
+            rm -f "$store"/*/"$name.jpg.tmp"; failed=$((failed + 1))
             echo "wallpaper: could not fetch $path" >&2
         fi
     done < "$repo_dir/sources"
     rm -rf "$tmp"
+    # A pick whose folder went (an old per-family one): the same picture in
+    # the current variant's colours, else its glow. The next login's swaybg
+    # would draw nothing from a broken link.
+    cur=$(readlink "$link")
+    if [[ -L $link && ! -e $link ]]; then
+        if [[ -f $store/$theme_stub/${cur##*/} ]]; then
+            ln -sfn "$store/$theme_stub/${cur##*/}" "$link"
+        else
+            ln -sfn "$repo_dir/$theme_stub.svg" "$link"
+        fi
+    fi
     echo "wallpaper: $ok fetched, $failed failed, in $store"
     (( failed == 0 ))
 }
-
-if [[ $1 == --fetch ]]; then
-    fetch
-    exit
-fi
 
 # The theme in use, from the theme picker's ~/.config/theme/current.
 read -r family variant < "$HOME/.config/theme/current" 2>/dev/null
@@ -73,8 +141,13 @@ case $family in
     *)          stub=$family ;;
 esac
 
+if [[ $1 == --fetch ]]; then
+    theme_stub=$stub fetch
+    exit
+fi
+
 choices=("$repo_dir/$stub.svg")
-for f in "$store/$family"/*.jpg; do
+for f in "$store/$stub"/*.jpg; do
     [[ -e $f ]] && choices+=("$f")
 done
 current=$(readlink "$link")

@@ -2476,7 +2476,7 @@ WAYBAR_BUILD_DEPS=(libgtkmm-3.0-dev libjsoncpp-dev libfmt-dev libspdlog-dev libg
 # What the session runs: X11 support, launcher, notifications, lock and idle,
 # wallpaper, the polkit password prompt, the media keys,
 # clipboard history, night light, the sound mixer Waybar opens, Thunar, and
-# Pillow, which blurs the community wallpapers.
+# Pillow, which recolours the community wallpapers.
 # pactl and gdbus are for .local/bin/osd; wdisplays arranges screens.
 NIRI_SESSION_PKGS=(xwayland fuzzel mako-notifier swaylock swayidle swaybg policykit-1-gnome
   playerctl cliphist wl-clipboard wlsunset pulsemixer papirus-icon-theme thunar python3-pil
@@ -2886,12 +2886,12 @@ default_file_manager() {
     || log_error "file manager" "xdg-mime default failed"
 }
 
-# The blurred community wallpapers (.config/niri/wallpapers/sources) into
-# ~/.local/share/wallpapers; ones already there are kept. Not fatal: the
-# themes' own glow wallpapers need no download.
+# The community wallpapers (.config/niri/wallpapers/sources), recoloured for
+# each theme variant into ~/.local/share/wallpapers; ones already made are
+# kept. Not fatal: the themes' own glow wallpapers need no download.
 fetch_wallpapers() {
   local out
-  run_spin_capture "fetching and blurring wallpapers..." out "$DOTFILES/.local/bin/wallpaper" --fetch
+  run_spin_capture "fetching and recolouring wallpapers..." out "$DOTFILES/.local/bin/wallpaper" --fetch
   if [[ "$out" == *" 0 failed"* ]]; then
     log_ok "wallpapers: ${out#wallpaper: }"
   else
@@ -3110,14 +3110,15 @@ apply_theme() {
   if [[ -x "$NIRI_BIN" ]]; then
     mkdir -p "$HOME/.config/niri" "$HOME/.config/waybar" "$HOME/.config/fuzzel" \
       "$HOME/.config/mako" "$HOME/.config/swaylock"
-    # The wallpaper: the theme's glow, unless one of the family's blurred
-    # community wallpapers is picked (Super+Alt+W, .local/bin/wallpaper), which
-    # stays when switching between variants of the same family. The link was
-    # wallpaper.svg before those existed; the old one goes.
-    local wp_target wp_cur
+    # The wallpaper: the theme's glow, unless one of the community wallpapers
+    # is picked (Super+Alt+W, .local/bin/wallpaper). Each variant has its own
+    # recoloured copy, so switching between variants of a family keeps the
+    # same picture in the new colours. The link was wallpaper.svg before
+    # those existed; the old one goes.
+    local wp_target wp_cur wp_store="${XDG_DATA_HOME:-$HOME/.local/share}/wallpapers"
     wp_target="$DOTFILES/.config/niri/wallpapers/${stub}.svg"
     wp_cur=$(readlink "$HOME/.config/niri/wallpaper" 2>/dev/null)
-    [[ "$wp_cur" == "${XDG_DATA_HOME:-$HOME/.local/share}/wallpapers/$family/"* && -f "$wp_cur" ]] && wp_target="$wp_cur"
+    [[ "$wp_cur" == "$wp_store/"* && -f "$wp_store/$stub/${wp_cur##*/}" ]] && wp_target="$wp_store/$stub/${wp_cur##*/}"
     [[ -L "$HOME/.config/niri/wallpaper.svg" ]] && rm -f "$HOME/.config/niri/wallpaper.svg"
     pointers+=(
       "$DOTFILES/.config/niri/${stub}.kdl:$HOME/.config/niri/theme.kdl:niri theme → ${label}"
