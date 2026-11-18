@@ -1,7 +1,7 @@
 import time
 import os
 from kitty.fast_data_types import Screen, add_timer
-from kitty.tab_bar import DrawData, ExtraData, TabBarData, draw_tab_with_powerline, as_rgb
+from kitty.tab_bar import DrawData, ExtraData, TabBarData, as_rgb, draw_title
 
 INTERVAL = 5  # seconds between updates
 
@@ -12,24 +12,24 @@ INTERVAL = 5  # seconds between updates
 DESKTOP_BAR = bool(os.environ.get("NIRI_SOCKET"))
 
 # Palettes — keys map to the variant stored in ~/.config/theme/current.
-# Order: BG, DATE, TIME, BAT, CPU, MEM, NET, IP, TEMP, SEP.
+# Order: DATE, TIME, BAT, CPU, MEM, NET, IP, TEMP, SEP.
 _CATPPUCCIN_PALETTES = {
-    "frappe":    (0x232634, 0xe5c890, 0x99d1db, 0xa6d189, 0xef9f76,
+    "frappe":    (0xe5c890, 0x99d1db, 0xa6d189, 0xef9f76,
                   0x85c1dc, 0xca9ee6, 0x81c8be, 0xe78284, 0x737994),
-    "macchiato": (0x181926, 0xeed49f, 0x91d7e3, 0xa6da95, 0xf5a97f,
+    "macchiato": (0xeed49f, 0x91d7e3, 0xa6da95, 0xf5a97f,
                   0x7dc4e4, 0xc6a0f6, 0x8bd5ca, 0xed8796, 0x6e738d),
-    "mocha":     (0x11111b, 0xf9e2af, 0x89dceb, 0xa6e3a1, 0xfab387,
+    "mocha":     (0xf9e2af, 0x89dceb, 0xa6e3a1, 0xfab387,
                   0x74c7ec, 0xcba6f7, 0x94e2d5, 0xf38ba8, 0x6c7086),
 }
 
 # Gruvbox's "bright" set (dark bg accents).
 _GRUVBOX_PALETTES = {
-    "dark":  (0x282828, 0xfabd2f, 0x83a598, 0xb8bb26, 0xfe8019,
+    "dark":  (0xfabd2f, 0x83a598, 0xb8bb26, 0xfe8019,
               0x8ec07c, 0xd3869b, 0x689d6a, 0xfb4934, 0x928374),
 }
 
 _DRACULA_PALETTES = {
-    "dark":  (0x282a36, 0xf1fa8c, 0x8be9fd, 0x50fa7b, 0xffb86c,
+    "dark":  (0xf1fa8c, 0x8be9fd, 0x50fa7b, 0xffb86c,
               0xbd93f9, 0xff79c6, 0x8be9fd, 0xff5555, 0x6272a4),
 }
 
@@ -52,7 +52,7 @@ def _load_palette() -> tuple[int, ...]:
     return _FAMILIES[family][variant]
 
 
-_BG, _DATE, _TIME, _BAT, _CPU, _MEM, _NET, _IP, _TEMP, _SEP = _load_palette()
+_DATE, _TIME, _BAT, _CPU, _MEM, _NET, _IP, _TEMP, _SEP = _load_palette()
 
 _timer_id = None
 _cache: list[tuple[int, str]] = []  # computed once per tick, reused on every draw
@@ -366,6 +366,43 @@ time.sleep(0.2)  # short pause so first CPU delta is meaningful
 _update_cache()
 
 
+# ── Tabs ──────────────────────────────────────────────────────────────────────
+
+_CAP_L, _CAP_R = "\ue0b6", "\ue0b4"  # round ends of the active tab's pill
+
+
+def _draw_seamless_tab(
+    draw_data: DrawData, screen: Screen, tab: TabBarData, before: int, max_tab_length: int, index: int
+) -> int:
+    """No band behind the tabs: cells keep the window's own background
+    (cursor.bg 0), so the bar is as translucent as the terminal. The active
+    tab is a pill in active_tab_background with its foreground; the others
+    are inactive_tab_foreground text. Colours come from the theme file."""
+    pill = as_rgb(int(draw_data.active_bg))
+    fg = screen.cursor.fg  # kitty sets the active or inactive foreground
+    screen.cursor.bg = 0
+    if screen.cursor.x == 0:
+        screen.draw(" ")
+    if tab.is_active:
+        screen.cursor.fg = pill
+        screen.draw(_CAP_L)
+        screen.cursor.bg, screen.cursor.fg = pill, fg
+    else:
+        screen.draw(" ")
+    draw_title(draw_data, screen, tab, index, max_tab_length)
+    extra = screen.cursor.x + 2 - before - max_tab_length
+    if extra > 0 and extra + 1 < screen.cursor.x:
+        screen.cursor.x -= extra + 1
+        screen.draw("…")
+    if tab.is_active:
+        screen.cursor.fg, screen.cursor.bg = pill, 0
+        screen.draw(_CAP_R)
+    else:
+        screen.draw(" ")
+    screen.draw(" ")
+    return screen.cursor.x
+
+
 # ── Kitty draw ────────────────────────────────────────────────────────────────
 
 def _on_timer(timer_id: int) -> None:
@@ -389,9 +426,7 @@ def draw_tab(
     if _timer_id is None and not DESKTOP_BAR:
         _timer_id = add_timer(_on_timer, INTERVAL, True)
 
-    end = draw_tab_with_powerline(
-        draw_data, screen, tab, before, max_tab_length, index, is_last, extra_data
-    )
+    end = _draw_seamless_tab(draw_data, screen, tab, before, max_tab_length, index)
 
     if is_last:
         # Priority order: drop from the front first (hostname, then cpu freq, etc.)
@@ -443,7 +478,7 @@ def draw_tab(
             full = sep.join(t for _, t in visible) + " "
             x = screen.columns - len(full)
             screen.cursor.x = x
-            screen.cursor.bg = as_rgb(_BG)
+            screen.cursor.bg = 0  # the window's own, translucent
             screen.cursor.bold = True
             for i, (color, text) in enumerate(visible):
                 screen.cursor.fg = as_rgb(color)
