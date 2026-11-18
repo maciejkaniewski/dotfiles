@@ -36,8 +36,8 @@ family_of() {
 # each pixel recoloured into a mix of the glow's colours, laid over the base
 # so the accents read as glows, blurred, with a touch of grain so the
 # gradients don't band.
-fetch() {
-    local svg stub family spec path name url tmp cur ok=0 failed=0 outs
+fetch() {  # the current theme's variant
+    local theme_stub=$1 svg stub family spec path name url tmp cur ok=0 failed=0 outs
     local -A stubs=()
     for svg in "$repo_dir"/*.svg; do
         stub=${svg##*/}; stub=${stub%.svg}
@@ -142,7 +142,7 @@ case $family in
 esac
 
 if [[ $1 == --fetch ]]; then
-    theme_stub=$stub fetch
+    fetch "$stub"
     exit
 fi
 
