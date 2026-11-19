@@ -186,6 +186,16 @@ gweb() {
   esac
   print -r -- "$url"
   xdg-open "$url" &>/dev/null &!
+  # A browser that is already running opens the tab in its last-used window
+  # without asking niri for focus, so the page loads out of sight. Focus that
+  # window ourselves. A browser that wasn't running opens a new window, which
+  # niri focuses anyway.
+  if [[ -n $NIRI_SOCKET ]] && (( $+commands[jq] )); then
+    local app=${$(xdg-settings get default-web-browser 2>/dev/null)%.desktop} id
+    id=$(niri msg -j windows | jq --arg app "$app" '[.[] | select(.app_id == $app)]
+      | max_by((.focus_timestamp.secs // 0) * 1e9 + (.focus_timestamp.nanos // 0)) | .id // empty')
+    [[ -n $id ]] && niri msg action focus-window --id $id >/dev/null
+  fi
 }
 _gweb_widget() { zle -I; gweb }
 zle -N _gweb_widget
