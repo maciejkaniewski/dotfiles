@@ -40,5 +40,4 @@ swayidle=1.9.1
 pixman=0.46.4          # for fuzzel
 fuzzel=1.15.0
 fcft=3.3.3             # fuzzel's font library, built in
-wlsunset=0.4.0
 cliphist=0.7.0

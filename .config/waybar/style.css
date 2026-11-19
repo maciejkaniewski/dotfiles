@@ -107,7 +107,7 @@ window#waybar.side #workspaces button {
 }
 
 #cpu, #memory, #custom-io, #custom-thermal, #custom-serial,
-#tray, #idle_inhibitor, #bluetooth, #pulseaudio, #power-profiles-daemon, #battery, #custom-power {
+#tray, #idle_inhibitor, #custom-night-light, #bluetooth, #pulseaudio, #power-profiles-daemon, #battery, #custom-power {
     padding: 0 8px;
 }
 
@@ -119,6 +119,8 @@ window#waybar.side #workspaces button {
 
 #idle_inhibitor           { color: @overlay; }
 #idle_inhibitor.activated { color: @date; }
+#custom-night-light       { color: @overlay; }
+#custom-night-light.warm  { color: @date; }
 #bluetooth                { color: @time; }
 #bluetooth.off,
 #bluetooth.disabled       { color: @overlay; }

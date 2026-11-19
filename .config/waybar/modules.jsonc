@@ -15,7 +15,7 @@
     },
     "group/controls": {
         "orientation": "horizontal",
-        "modules": ["tray", "idle_inhibitor", "bluetooth", "pulseaudio", "power-profiles-daemon", "battery", "battery#time", "custom/power"]
+        "modules": ["tray", "idle_inhibitor", "custom/night-light", "bluetooth", "pulseaudio", "power-profiles-daemon", "battery", "battery#time", "custom/power"]
     },
 
     // Each workspace's name or number, then an icon per window on it (from
@@ -129,6 +129,22 @@
         "format-icons": { "activated": "󰅶", "deactivated": "󰾪" },
         "tooltip-format-activated": "Staying awake (click to allow idle lock)",
         "tooltip-format-deactivated": "Idle lock on (click to stay awake)"
+    },
+    // Night light (.local/bin/night-light): the moon while the screen is warm,
+    // the sun while it isn't. Click to switch it on or off now, overriding the
+    // schedule; right-click for a warmth slider and the schedule's times, with
+    // a button back to the schedule after such a click; scrolling steps the
+    // warmth too. The minute interval catches the schedule's turns; a click
+    // updates it at once (signal 8).
+    "custom/night-light": {
+        "exec": "night-light",
+        "return-type": "json",
+        "interval": 60,
+        "signal": 8,
+        "on-click": "night-light --toggle",
+        "on-click-right": "night-light --slider",
+        "on-scroll-up": "night-light --warmer",
+        "on-scroll-down": "night-light --cooler"
     },
     "bluetooth": {
         "format": "󰂯",

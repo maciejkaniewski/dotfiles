@@ -154,8 +154,10 @@ spawn-at-startup "launcher-icons"
 spawn-at-startup "ports" "--notify"
 // Clipboard history for Super+Shift+C: text and images, as they're copied.
 spawn-at-startup "wl-paste" "--watch" "cliphist" "store"
-// Night light: warmer colours from 20:00 until 06:00, fading over an hour.
-spawn-at-startup "wlsunset" "-s" "20:00" "-S" "06:00" "-t" "4000"
+// Night light: warmer colours on a schedule (20:00 until 06:00 unless changed
+// in its slider), fading in and out over an hour. .local/bin/night-light
+// keeps running to follow it; Waybar's moon/sun button runs it too.
+spawn-at-startup "night-light" "--start"
 // The wallpaper: the theme's glow (wallpapers/{variant}.svg) or one of its
 // family's blurred community ones (Super+Alt+W, .local/bin/wallpaper). The
 // theme picker links it and restarts swaybg on a switch. Blur behind kitty
@@ -259,6 +261,14 @@ window-rule {
 window-rule {
     match app-id=r#"(?i)slack|thunderbird|teams"#
     open-on-workspace "1"
+}
+
+// Night light's warmth slider (right-click on Waybar's moon/sun) pops up in
+// the top-right corner, where notifications do.
+window-rule {
+    match app-id=r#"^dotfiles\.NightLight$"#
+    open-floating true
+    default-floating-position x=16 y=16 relative-to="top-right"
 }
 
 // Small tools float instead of taking a whole column.

@@ -2475,25 +2475,27 @@ WAYBAR_BUILD_DEPS=(libgtkmm-3.0-dev libjsoncpp-dev libfmt-dev libspdlog-dev libg
   libxkbregistry-dev libevdev-dev libpam0g-dev libplayerctl-dev)
 # What the session runs: X11 support, launcher, notifications, lock and idle,
 # wallpaper, the polkit password prompt, the media keys,
-# clipboard history, night light, the sound mixer Waybar opens, Thunar, and
+# clipboard history, the sound mixer Waybar opens, Thunar, and
 # Pillow, which recolours the community wallpapers.
-# pactl and gdbus are for .local/bin/osd; wdisplays arranges screens.
+# pactl and gdbus are for .local/bin/osd; wdisplays arranges screens; Python's
+# GTK 4 and libadwaita draw night light's warmth slider (the night light itself
+# is from crates.io).
 NIRI_SESSION_PKGS=(xwayland fuzzel mako-notifier swaylock swayidle swaybg policykit-1-gnome
-  playerctl cliphist wl-clipboard wlsunset pulsemixer papirus-icon-theme thunar python3-pil
-  pulseaudio-utils libglib2.0-bin wdisplays)
+  playerctl cliphist wl-clipboard pulsemixer papirus-icon-theme thunar python3-pil
+  pulseaudio-utils libglib2.0-bin wdisplays python3-gi gir1.2-gtk-4.0 gir1.2-adw-1)
 
 # Ubuntu 22.04 (anything before 24.04) gets the same desktop with more of it
 # built from source, at the pins under "Ubuntu 22.04 only" in the versions file.
 # niri needs libinput 1.21 and 22.04 has 1.20, which GNOME uses, so a newer one
 # goes to /opt/niri-deps: not on the loader's path, so niri alone finds it, by
 # rpath. Waybar's niri modules, fuzzel and xwayland-satellite (Xwayland 23.1)
-# likewise need newer libraries than 22.04's, and it packages neither fuzzel,
-# cliphist nor wlsunset. niri is built without screen sharing there, as its
+# likewise need newer libraries than 22.04's, and it packages neither fuzzel
+# nor cliphist. niri is built without screen sharing there, as its
 # PipeWire (0.3.48) is too old for niri's bindings. Each build sees only the
 # pkg-config directories it needs, so nothing links a library from
 # /opt/niri-deps that it couldn't find again at run time.
 NIRI_DEPS=/opt/niri-deps
-NIRI_OLD_NOT_IN_APT=(libinput-dev libdisplay-info-dev fuzzel cliphist wlsunset)
+NIRI_OLD_NOT_IN_APT=(libinput-dev libdisplay-info-dev fuzzel cliphist)
 NIRI_OLD_BUILD_DEPS=(libmtdev-dev scdoc libtllist-dev libpng-dev libffi-dev libexpat1-dev libxml2-dev
   libdrm-dev libxcvt-dev libepoxy-dev libxfont-dev libxkbfile-dev xtrans-dev libxshmfence-dev
   libtirpc-dev x11proto-dev libbsd-dev mesa-common-dev)
@@ -2515,6 +2517,7 @@ NIRI_LINKS=(
   "niri|$DOTFILES/.local/bin/waybar-thermal:$HOME/.local/bin/waybar-thermal"
   "niri|$DOTFILES/.local/bin/waybar-cast:$HOME/.local/bin/waybar-cast"
   "niri|$DOTFILES/.local/bin/launcher-icons:$HOME/.local/bin/launcher-icons"
+  "niri|$DOTFILES/.local/bin/night-light:$HOME/.local/bin/night-light"
 )
 # xwayland-satellite has no --version, so the build records what it installed.
 XWS_STAMP=/usr/local/share/dotfiles/xwayland-satellite.version
@@ -2746,12 +2749,6 @@ fuzzel_build_install() {
     && sudo install -m 755 build/fuzzel /usr/local/bin/fuzzel
 }
 
-wlsunset_build_install() {
-  meson setup build --buildtype=release -Dman-pages=disabled \
-    && ninja -C build \
-    && sudo install -m 755 build/wlsunset /usr/local/bin/wlsunset
-}
-
 # Builds one of the 22.04 components when it is missing or off its pin. $1 is
 # the versions file key, $2 the repo URL, $3 the tag prefix, $4 the step, $5 a
 # file the install leaves, which must still be there.
@@ -2803,7 +2800,6 @@ install_niri_old_session() {
   install_old_component swayidle https://github.com/swaywm/swayidle.git v swayidle_build_install /usr/local/bin/swayidle
   install_old_component pixman "$fd/pixman/pixman.git" pixman- pixman_build_install "$NIRI_DEPS/pixman/lib/libpixman-1.a" \
     && install_old_component fuzzel https://codeberg.org/dnkl/fuzzel.git "" fuzzel_build_install /usr/local/bin/fuzzel
-  install_old_component wlsunset https://git.sr.ht/~kennylevinsen/wlsunset "" wlsunset_build_install /usr/local/bin/wlsunset
   install_cliphist
 }
 
@@ -2813,22 +2809,27 @@ crates_latest() {
     | grep -oP '"max_stable_version":"\K[0-9.]+'
 }
 
-# bluetui, the Bluetooth manager Waybar opens in kitty, from crates.io: it isn't
-# packaged for Ubuntu. Built in a scratch root so cargo's install records don't
-# land in ~/.local, then just the binary is copied to ~/.local/bin.
-install_bluetui() {
-  local latest have root="$SCRIPT_TMPDIR/bluetui"
-  have=$(command_exists bluetui && bluetui --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+')
-  run_spin_capture "checking latest bluetui..." latest crates_latest bluetui
+# The session's tools from crates.io, as Ubuntu doesn't package them: bluetui,
+# the Bluetooth manager Waybar opens in kitty, and wl-gammarelay-rs, which holds
+# the screens' colours for .local/bin/night-light and changes them without the
+# flicker of restarting wlsunset. Each crate's binary has its name.
+NIRI_CRATES=(bluetui wl-gammarelay-rs)
+
+# Builds crate $1 in a scratch root, so cargo's install records don't land in
+# ~/.local, then copies just the binary to ~/.local/bin.
+install_crate() {
+  local crate=$1 latest have root="$SCRIPT_TMPDIR/$1"
+  have=$(command_exists "$crate" && "$crate" --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+')
+  run_spin_capture "checking latest $crate..." latest crates_latest "$crate"
   if [[ -z "$latest" ]]; then
-    [[ -n "$have" ]] && { log_skip "bluetui $have (could not check latest)"; return; }
-    log_error "bluetui" "could not resolve the latest release — network down?"; return 1
+    [[ -n "$have" ]] && { log_skip "$crate $have (could not check latest)"; return; }
+    log_error "$crate" "could not resolve the latest release — network down?"; return 1
   fi
-  needs_install "bluetui" "$have" "$latest" "" || return 0
-  run_spin "building bluetui $latest..." "$HOME/.cargo/bin/cargo" install --locked --root "$root" "bluetui@$latest" \
-    && install -Dm 755 "$root/bin/bluetui" "$HOME/.local/bin/bluetui" \
-    && log_ok "bluetui $latest installed in ~/.local/bin" \
-    || { log_error "bluetui" "build failed"; return 1; }
+  needs_install "$crate" "$have" "$latest" "" || return 0
+  run_spin "building $crate $latest..." "$HOME/.cargo/bin/cargo" install --locked --root "$root" "$crate@$latest" \
+    && install -Dm 755 "$root/bin/$crate" "$HOME/.local/bin/$crate" \
+    && log_ok "$crate $latest installed in ~/.local/bin" \
+    || { log_error "$crate" "build failed"; return 1; }
 }
 
 # The keyboard layout is per machine, so it goes in the untracked local.kdl the
@@ -2958,7 +2959,7 @@ snap_theme_installs_off() {
 }
 
 install_niri_desktop() {
-  local missing=() dep pkgs=("${NIRI_BUILD_DEPS[@]}" "${WAYBAR_BUILD_DEPS[@]}" "${NIRI_SESSION_PKGS[@]}")
+  local missing=() dep crate pkgs=("${NIRI_BUILD_DEPS[@]}" "${WAYBAR_BUILD_DEPS[@]}" "${NIRI_SESSION_PKGS[@]}")
   niri_old_ubuntu && pkgs+=("${NIRI_OLD_BUILD_DEPS[@]}")
   for dep in "${pkgs[@]}"; do
     # On 22.04, built from source instead (install_niri_old_*).
@@ -2983,7 +2984,7 @@ install_niri_desktop() {
   niri_old_ubuntu && install_niri_old_session
   install_niri_component waybar Alexays/Waybar "" waybar_build_install
   install_niri_component swaylock-effects jirutka/swaylock-effects v swaylock_effects_build_install
-  install_bluetui
+  for crate in "${NIRI_CRATES[@]}"; do install_crate "$crate"; done
 
   local section_l src dst
   for entry in "${NIRI_LINKS[@]}"; do
@@ -3662,8 +3663,8 @@ verify_ser2net() {
   echo "ser2net $v (gensio $(gensio_installed_version)) from source; unit installed"
 }
 
-# Only run where --niri installed it: the three source builds are present and
-# the config, with its theme and local includes, parses.
+# Only run where --niri installed it: the source builds and the crates.io tools
+# are present and the config, with its theme and local includes, parses.
 verify_niri() {
   local key v versions=""
   for key in niri xwayland-satellite waybar swaylock-effects; do
@@ -3671,8 +3672,11 @@ verify_niri() {
     [[ -n "$v" ]] || { echo "$key missing (run --niri)"; return 1; }
     versions+="$key $v, "
   done
+  for key in "${NIRI_CRATES[@]}"; do
+    command_exists "$key" || { echo "$key missing (run --niri)"; return 1; }
+  done
   if niri_old_ubuntu; then
-    for key in wayland-protocols libinput libdisplay-info libwayland xwayland swayidle pixman fuzzel wlsunset; do
+    for key in wayland-protocols libinput libdisplay-info libwayland xwayland swayidle pixman fuzzel; do
       [[ -f "$(old_stamp "$key")" ]] || { echo "$key missing (run --niri)"; return 1; }
     done
     ldd "$NIRI_BIN" | grep -q "$NIRI_DEPS/lib/libinput" \

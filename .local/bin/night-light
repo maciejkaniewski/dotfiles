@@ -1,0 +1,372 @@
+#!/usr/bin/env bash
+# night-light: warmer screen colours, on a schedule or by hand, through
+# wl-gammarelay-rs (Waybar's custom/night-light).
+#
+#   night-light            print Waybar's JSON: warm or not, and why
+#   night-light --start    follow the schedule; keeps running (the niri session runs this at login)
+#   night-light --toggle   warm now if it isn't, normal now if it is (click)
+#   night-light --slider   a warmth slider in the top-right corner (right-click)
+#   night-light --warmer   one level warmer (scroll up)
+#   night-light --cooler   one level less warm (scroll down)
+#   night-light --auto     back to the schedule (the slider's Schedule button)
+#
+# The schedule: warm from $sunset until $sunrise, warming over the first $fade
+# minutes and cooling over the last. Its times are set in the slider and kept
+# across logins, as is the warmth: one of seven levels, 5500 K up to 2500 K. A
+# choice made by hand lasts until --auto or the next login; it's kept in the
+# runtime dir. wl-gammarelay-rs holds
+# the screens' colours and takes a new temperature while it runs, so every
+# change glides there in small steps, rather than flashing back to normal first
+# as restarting wlsunset did.
+
+default_times="20:00 06:00" fade=60  # warm from, until
+levels=(5500 5000 4500 4000 3500 3000 2500) default_level=4
+neutral=6500         # wl-gammarelay-rs's temperature for unchanged colours
+mode_file="${XDG_RUNTIME_DIR:-/tmp}/night-light"
+level_file="${XDG_STATE_HOME:-$HOME/.local/state}/night-light-level"
+times_file="${XDG_STATE_HOME:-$HOME/.local/state}/night-light-times"
+lock_file="${XDG_RUNTIME_DIR:-/tmp}/night-light.lock"
+pid_file="${XDG_RUNTIME_DIR:-/tmp}/night-light.pid"
+preview_file="${XDG_RUNTIME_DIR:-/tmp}/night-light.preview"  # the open slider's pid
+title="Night light"
+app_id=dotfiles.NightLight  # the slider window's, matched by a niri window rule
+signal=8             # Waybar's custom/night-light updates on SIGRTMIN+8
+relay=(rs.wl-gammarelay / rs.wl.gammarelay Temperature)
+
+mode() { cat "$mode_file" 2>/dev/null || echo auto; }
+
+load() {
+    local hhmm='([01][0-9]|2[0-3]):[0-5][0-9]' times
+    level=$(cat "$level_file" 2>/dev/null)
+    [[ $level =~ ^[1-7]$ ]] || level=$default_level
+    temp=${levels[level - 1]}
+    times=$(cat "$times_file" 2>/dev/null)
+    [[ $times =~ ^$hhmm\ $hhmm$ ]] || times=$default_times
+    read -r sunset sunrise <<< "$times"
+}
+
+case $1 in
+    --toggle | --auto | --warmer | --cooler)
+        # Scrolling sends a burst of these: one at a time, each reading the
+        # level the one before wrote. The slider and --start lock per change.
+        exec 9>"$lock_file"
+        flock 9 ;;
+esac
+load
+
+mins() { echo $(( 10#${1%:*} * 60 + 10#${1#*:} )); }
+
+# Sets since (minutes since $sunset) and night (how many minutes it lasts).
+clock() {
+    local now s r
+    now=$(mins "$(date +%H:%M)")
+    s=$(mins "$sunset")
+    r=$(mins "$sunrise")
+    since=$(( (now - s + 1440) % 1440 ))
+    night=$(( (r - s + 1440) % 1440 ))
+}
+
+# Whether the schedule has it warm now.
+night() {
+    clock
+    (( since < night ))
+}
+
+warm() {
+    case $(mode) in
+        on) return 0 ;;
+        off) return 1 ;;
+        *) night ;;
+    esac
+}
+
+# Whether the slider is open, showing its level whatever the schedule says. A
+# slider that died without cleaning up doesn't count.
+previewing() {
+    local pid
+    pid=$(cat "$preview_file" 2>/dev/null) && kill -0 "$pid" 2>/dev/null
+}
+
+# The temperature the screen should have now.
+target() {
+    previewing && { echo "$temp"; return; }
+    case $(mode) in
+        on) echo "$temp"; return ;;
+        off) echo "$neutral"; return ;;
+    esac
+    clock
+    # A night shorter than two fades fades in over its first half, out over its second.
+    local left=$(( night - since )) f=$(( night / 2 < fade ? night / 2 : fade ))
+    if (( since >= night )); then echo "$neutral"
+    elif (( since < f )); then echo $(( neutral - (neutral - temp) * since / f ))
+    elif (( left < f )); then echo $(( neutral - (neutral - temp) * left / f ))
+    else echo "$temp"
+    fi
+}
+
+# wl-gammarelay-rs, started if it isn't running. It gives up for good on a
+# screen another gamma client holds, so a wlsunset left from before goes first.
+relay_up() {
+    busctl --user status rs.wl-gammarelay &>/dev/null && return
+    command -v wl-gammarelay-rs >/dev/null || return 1
+    pkill -x wlsunset
+    for _ in {1..20}; do pgrep -x wlsunset >/dev/null || break; sleep 0.05; done
+    # Through niri, so it stays in the session rather than under Waybar.
+    if [[ -n $NIRI_SOCKET ]]; then
+        niri msg action spawn -- wl-gammarelay-rs run >/dev/null
+    else
+        setsid -f wl-gammarelay-rs run >/dev/null 2>&1
+    fi
+    for _ in {1..40}; do
+        busctl --user status rs.wl-gammarelay &>/dev/null && return
+        sleep 0.05
+    done
+    return 1
+}
+
+# Glides the screen to the target temperature, 100 K at a time: switching on or
+# off takes under a second, and a level about a tenth of one.
+apply() {
+    local to now d
+    to=$(target)
+    relay_up || return
+    now=$(busctl --user get-property "${relay[@]}" 2>/dev/null) || return
+    now=${now#q }
+    while (( now != to )); do
+        d=$(( to - now ))
+        (( d > 100 )) && d=100
+        (( d < -100 )) && d=-100
+        now=$(( now + d ))
+        busctl --user set-property "${relay[@]}" q "$now" || return
+        (( now == to )) || sleep 0.015
+    done
+}
+
+set_level() {
+    mkdir -p "${level_file%/*}"
+    echo "$1" > "$level_file"
+    level=$1 temp=${levels[$1 - 1]}
+}
+
+# The warmth as a pop-up with a bar, in the slot .local/bin/osd's volume and
+# brightness pop-ups use, so each replaces the last.
+show() {
+    local id reply id_file="${XDG_RUNTIME_DIR:-/tmp}/osd.id"
+    id=$(cat "$id_file" 2>/dev/null)
+    reply=$(gdbus call --session --dest org.freedesktop.Notifications \
+        --object-path /org/freedesktop/Notifications --method org.freedesktop.Notifications.Notify \
+        osd "${id:-0}" "" "󰖔  Night light" "$temp K" "[]" \
+        "{'value': <int32 $((level * 100 / ${#levels[@]}))>, 'transient': <true>}" 1500) || return
+    [[ $reply =~ uint32\ ([0-9]+) ]] && echo "${BASH_REMATCH[1]}" > "$id_file"
+}
+
+# One level warmer (+1) or cooler (-1), shown before it's applied. On the
+# schedule by day nothing changes yet, but tonight's warmth does.
+step() {
+    local new=$((level + $1))
+    (( new >= 1 && new <= ${#levels[@]} )) && set_level "$new"
+    show
+}
+
+set_times() {
+    mkdir -p "${times_file%/*}"
+    echo "$1 $2" > "$times_file"
+    sunset=$1 sunrise=$2
+}
+
+# A small window: the warmth slider between a sun and a moon, and under it the
+# schedule's times, with a Schedule button while a click overrides the schedule.
+# The slider sets the warmth only, never on or off: while it's open the screen
+# shows the level it's set to, and afterwards goes back to what the schedule or
+# a click says, so by day a new level waits for the evening. The window prints
+# each level as the knob passes it, "times FROM UNTIL" as they change, or
+# "Schedule", and exits 1 on Escape (undo it all) and 0 otherwise: Enter, a
+# click on another window, or a second right-click, which reaches this one as a
+# second activation.
+slider() {
+    local was_level=$level was_times="$sunset $sunrise" manual=0 v from until
+    [[ $(mode) == auto ]] || manual=1
+    echo $$ > "$preview_file"
+    { flock 9; apply; } 9>"$lock_file"
+    while read -r v; do
+        case $v in
+            [1-7])
+                [[ $v == "$level" ]] && continue
+                { flock 9; set_level "$v"; apply; } 9>"$lock_file" ;;
+            times\ *)
+                read -r _ from until <<< "$v"
+                { flock 9; set_times "$from" "$until"; } 9>"$lock_file" ;;
+            Schedule) rm -f "$mode_file" ;;
+            status:0) ;;
+            status:*)
+                read -r from until <<< "$was_times"
+                { flock 9; set_level "$was_level"; set_times "$from" "$until"; } 9>"$lock_file" ;;
+        esac
+        pkill -RTMIN+$signal -x waybar
+    done < <(python3 - "$level" ${#levels[@]} "$sunset" "$sunrise" "$manual" "$title" "$app_id" \
+                 2>/dev/null <<'PY'
+import sys
+import gi
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gdk, Gtk
+
+level, levels = int(sys.argv[1]), int(sys.argv[2])
+start, until, manual, title, app_id = sys.argv[3:8]
+status = 0
+shown = level
+
+def finish(code):
+    global status
+    status = code
+    app.quit()
+
+def moved(scale):
+    global shown
+    if round(scale.get_value()) != shown:
+        shown = round(scale.get_value())
+        print(shown, flush=True)
+
+def hhmm(minutes):
+    return "%02d:%02d" % divmod(minutes, 60)
+
+# A time as "- 20:00 +", in half-hour steps by the buttons or by scrolling over
+# it, round the clock. (GTK 4.14's spin button won't show a time from Python.)
+def time_control(text, changed):
+    hours, minutes = text.split(":")
+    control = Gtk.Box()
+    control.minutes = int(hours) * 60 + int(minutes)
+    label = Gtk.Label(label=text, width_chars=6)
+
+    def step(delta):
+        control.minutes = (control.minutes + 30 * delta) % (24 * 60)
+        label.set_label(hhmm(control.minutes))
+        changed()
+
+    for widget, delta in ((Gtk.Button(icon_name="list-remove-symbolic"), -1), (label, 0),
+                          (Gtk.Button(icon_name="list-add-symbolic"), 1)):
+        if delta:
+            widget.set_focusable(False)
+            widget.add_css_class("flat")
+            widget.add_css_class("circular")
+            widget.connect("clicked", lambda _button, delta=delta: step(delta))
+        control.append(widget)
+    scroll = Gtk.EventControllerScroll(
+        flags=Gtk.EventControllerScrollFlags.VERTICAL | Gtk.EventControllerScrollFlags.DISCRETE)
+    scroll.connect("scroll", lambda _controller, _dx, dy: step(-1 if dy > 0 else 1) or True)
+    control.add_controller(scroll)
+    return control
+
+def schedule(_button):
+    print("Schedule", flush=True)
+    finish(0)
+
+def key(_controller, keyval, _keycode, _state):
+    if keyval == Gdk.KEY_Escape:
+        finish(1)
+    elif keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+        finish(0)
+    else:
+        return False
+    return True
+
+def focus(window, _param):
+    if window.is_active():
+        window.was_active = True
+    elif getattr(window, "was_active", False):
+        finish(0)
+
+def activate(app):
+    if app.get_windows():
+        return finish(0)
+    scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, levels, 1)
+    scale.set_value(level)
+    scale.set_round_digits(0)
+    scale.set_hexpand(True)
+    for mark in range(1, levels + 1):
+        scale.add_mark(mark, Gtk.PositionType.BOTTOM, None)
+    scale.connect("value-changed", moved)
+    warmth = Gtk.Box(spacing=8)
+    for widget in (Gtk.Image(icon_name="weather-clear-symbolic"), scale,
+                   Gtk.Image(icon_name="weather-clear-night-symbolic")):
+        warmth.append(widget)
+
+    controls = []
+    changed = lambda: print("times", *(hhmm(c.minutes) for c in controls), flush=True)
+    controls += time_control(start, changed), time_control(until, changed)
+    times = Gtk.Box(spacing=4, halign=Gtk.Align.CENTER)
+    for widget in (Gtk.Label(label="From"), controls[0], Gtk.Label(label="until"), controls[1]):
+        times.append(widget)
+    if manual == "1":
+        button = Gtk.Button(label="Schedule", focusable=False, tooltip_text="Back to the schedule")
+        button.add_css_class("flat")
+        button.connect("clicked", schedule)
+        times.append(button)
+
+    content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
+                      margin_top=10, margin_bottom=10, margin_start=14, margin_end=14)
+    content.append(warmth)
+    content.append(times)
+    window = Adw.ApplicationWindow(application=app, title=title, resizable=False, content=content)
+    # Before the widgets see them, so Escape and Enter work wherever the focus is.
+    keys = Gtk.EventControllerKey(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+    keys.connect("key-pressed", key)
+    window.add_controller(keys)
+    window.connect("notify::is-active", focus)
+    window.present()
+    scale.grab_focus()
+
+app = Adw.Application(application_id=app_id)
+app.connect("activate", activate)
+app.run([sys.argv[0]])
+sys.exit(status)
+PY
+             echo "status:$?")
+    rm -f "$preview_file"
+    { flock 9; apply; } 9>"$lock_file"
+    pkill -RTMIN+$signal -x waybar
+}
+
+# Waybar's JSON. Classes: warm or normal, and manual while a click overrides
+# the schedule.
+status() {
+    command -v wl-gammarelay-rs >/dev/null || return
+    local text class tip
+    if warm; then text="󰖔" class='"warm"'; else text="󰖙" class='"normal"'; fi
+    case $(mode),$class in
+        auto,'"warm"') tip="Warm until $sunrise" ;;
+        auto,*) tip="Warm from $sunset" ;;
+        on,*) tip="Warm, by hand"; class+=', "manual"' ;;
+        off,*) tip="Off, by hand"; class+=', "manual"' ;;
+    esac
+    printf '{"text": "%s", "tooltip": "%s · %s K", "class": [%s]}\n' "$text" "$tip" "$temp" "$class"
+}
+
+case $1 in
+    "") status; exit ;;
+    --start)
+        # One schedule at a time: a second --start replaces the first.
+        rm -f "$mode_file"
+        old=$(cat "$pid_file" 2>/dev/null)
+        [[ -n $old && $(tr '\0' ' ' < "/proc/$old/cmdline" 2>/dev/null) == *"night-light --start"* ]] \
+            && kill "$old"
+        echo $$ > "$pid_file"
+        while :; do
+            { flock 9; load; apply; } 9>"$lock_file"
+            sleep $(( 60 - 10#$(date +%S) ))
+        done ;;
+    --slider) slider; exit ;;
+    --toggle)
+        if warm; then new=off; else new=on; fi
+        echo "$new" > "$mode_file" ;;
+    --auto) rm -f "$mode_file" ;;
+    --warmer) step 1 ;;
+    --cooler) step -1 ;;
+    *)
+        echo "usage: night-light [--start | --toggle | --slider | --warmer | --cooler | --auto]" >&2
+        exit 2 ;;
+esac
+
+# The button changes at once; the screen glides after it.
+pkill -RTMIN+$signal -x waybar
+apply
