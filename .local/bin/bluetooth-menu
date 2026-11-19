@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# bluetooth-menu: the paired Bluetooth devices in fuzzel (click on Waybar's
+# Bluetooth icon), connected ones first with a tick and their battery when they
+# report it. Picking one connects it, or disconnects it if it's connected. Last
+# come Bluetooth off (or on) and pairing a new device, which opens bluetui, as
+# pairing needs its scan.
+
+pair() { exec kitty --title bluetui -e bluetui; }
+
+# A notification that replaces notification $1 (0 for none), printing its id:
+# "Connecting…" is replaced by how it went. $2 the summary, $3 the body, $4
+# the urgency (0 low, 1 normal, 2 critical).
+note() {
+    gdbus call --session --dest org.freedesktop.Notifications \
+        --object-path /org/freedesktop/Notifications --method org.freedesktop.Notifications.Notify \
+        Bluetooth "$1" bluetooth "$2" "${3:-}" "[]" "{'urgency': <byte ${4:-1}>}" 4000 \
+        | grep -oP 'uint32 \K[0-9]+'
+}
+
+bluetoothctl show 2>/dev/null | grep -q 'Controller' || { note 0 "No Bluetooth adapter" >/dev/null; exit 1; }
+
+macs=() lines=() connected=()
+if bluetoothctl show | grep -q 'Powered: yes'; then
+    # "devices Paired" is BlueZ 5.65 on; 22.04's 5.64 has "paired-devices".
+    paired=$(bluetoothctl devices Paired 2>/dev/null)
+    [[ -n $paired ]] || paired=$(bluetoothctl paired-devices 2>/dev/null)
+    first=() rest=() first_macs=() rest_macs=()
+    while read -r _ mac name; do
+        [[ $mac =~ ^([0-9A-F]{2}:){5}[0-9A-F]{2}$ ]] || continue
+        info=$(bluetoothctl info "$mac")
+        case $(grep -oP 'Icon: \K.*' <<< "$info") in
+            audio-head*|audio-card) icon=󰋋 ;;
+            input-mouse) icon=󰍽 ;;
+            input-keyboard) icon=󰌌 ;;
+            input-gaming) icon=󰊴 ;;
+            phone) icon=󰏲 ;;
+            *) icon=󰂯 ;;
+        esac
+        line="$icon  $name"
+        if grep -q 'Connected: yes' <<< "$info"; then
+            battery=$(grep -oP 'Battery Percentage: .*\(\K[0-9]+' <<< "$info")
+            [[ -n $battery ]] && line+="  $battery%"
+            first+=("$line  ✓") first_macs+=("$mac")
+        else
+            rest+=("$line") rest_macs+=("$mac")
+        fi
+    done <<< "$paired"
+    lines=("${first[@]}" "${rest[@]}") macs=("${first_macs[@]}" "${rest_macs[@]}")
+    connected=("${first_macs[@]}")
+    lines+=("󰂲  Turn Bluetooth off")
+else
+    lines+=("󰂯  Turn Bluetooth on")
+fi
+lines+=("󰐕  Pair a new device…")
+
+prompt="Bluetooth: " width=${#prompt}
+for line in "${lines[@]}"; do (( ${#line} > width )) && width=${#line}; done
+pick=$(printf '%s\n' "${lines[@]}" \
+    | fuzzel --dmenu --index --prompt "$prompt" --lines ${#lines[@]} --width $(( width + 6 ))) || exit 0
+# Typed text that matches nothing comes back as itself, not an index.
+[[ $pick =~ ^[0-9]+$ ]] || exit 0
+
+case ${lines[pick]} in
+    *"Turn Bluetooth off") bluetoothctl power off >/dev/null; exit ;;
+    *"Turn Bluetooth on")
+        # A soft block (airplane mode) would refuse the power on.
+        rfkill unblock bluetooth 2>/dev/null
+        bluetoothctl power on >/dev/null; exit ;;
+    *"Pair a new device…") pair ;;
+esac
+
+mac=${macs[pick]} name=$(bluetoothctl info "${macs[pick]}" | grep -oP 'Alias: \K.*')
+if [[ " ${connected[*]} " == *" $mac "* ]]; then
+    if bluetoothctl disconnect "$mac" >/dev/null; then note 0 "Disconnected $name" >/dev/null
+    else note 0 "Couldn't disconnect $name" "" 2 >/dev/null; fi
+    exit
+fi
+id=$(note 0 "Connecting to $name…")
+if out=$(bluetoothctl connect "$mac" 2>&1) && [[ $out == *"Connection successful"* ]]; then
+    note "${id:-0}" "Connected to $name" >/dev/null
+else
+    # A page timeout, the usual failure, means it didn't answer.
+    reason=$(grep -oP 'Failed to connect: (org\.bluez\.Error\.)?\K.*' <<< "$out")
+    [[ -z $reason || $reason == *page-timeout* ]] && reason="Is it on and in range?"
+    note "${id:-0}" "Couldn't connect to $name" "$reason" 2 >/dev/null
+fi

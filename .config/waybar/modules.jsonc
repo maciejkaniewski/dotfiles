@@ -139,7 +139,7 @@
     },
     // Wi-Fi's signal, or the cable while on one; hover for the network and
     // address. Click for nearby networks in fuzzel (.local/bin/wifi-menu),
-    // right-click for GNOME Settings' Wi-Fi page. The download and upload
+    // which ends with GNOME Settings' Wi-Fi page. The download and upload
     // speeds are in the disk readout's tooltip (custom/io). nm-applet isn't
     // started (.config/autostart/nm-applet.desktop), so its icon doesn't add
     // a second Wi-Fi to the tray.
@@ -152,8 +152,7 @@
         "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ipaddr}/{cidr}",
         "tooltip-format-ethernet": "{ifname}\n{ipaddr}/{cidr}",
         "tooltip-format-disconnected": "Offline",
-        "on-click": "wifi-menu",
-        "on-click-right": "wifi-menu --settings"
+        "on-click": "wifi-menu"
     },
     // Keep awake: while on, the idle lock and screen-off don't happen.
     "idle_inhibitor": {
@@ -178,6 +177,9 @@
         "on-scroll-up": "night-light --warmer",
         "on-scroll-down": "night-light --cooler"
     },
+    // Hover for the connected devices. Click for the paired ones in fuzzel, to
+    // connect or disconnect (.local/bin/bluetooth-menu), which ends with
+    // bluetui in a floating kitty, to pair a new one.
     "bluetooth": {
         "format": "󰂯",
         "format-off": "󰂲",
@@ -186,7 +188,7 @@
         "tooltip-format": "Bluetooth {status}",
         "tooltip-format-connected": "{device_enumerate}",
         "tooltip-format-enumerate-connected": "{device_alias}",
-        "on-click": "kitty --title bluetui -e bluetui"
+        "on-click": "bluetooth-menu"
     },
     // Click for pulsemixer; right-click to pick where sound plays, or mute
     // (.local/bin/sound-output).

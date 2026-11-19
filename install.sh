@@ -2521,6 +2521,7 @@ NIRI_LINKS=(
   "niri|$DOTFILES/.local/bin/night-light:$HOME/.local/bin/night-light"
   "niri|$DOTFILES/.local/bin/sound-output:$HOME/.local/bin/sound-output"
   "niri|$DOTFILES/.local/bin/wifi-menu:$HOME/.local/bin/wifi-menu"
+  "niri|$DOTFILES/.local/bin/bluetooth-menu:$HOME/.local/bin/bluetooth-menu"
   "niri|$DOTFILES/.config/autostart/nm-applet.desktop:$HOME/.config/autostart/nm-applet.desktop"
 )
 # xwayland-satellite has no --version, so the build records what it installed.

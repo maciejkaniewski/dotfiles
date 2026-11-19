@@ -2,13 +2,10 @@
 # wifi-menu: nearby Wi-Fi networks in fuzzel (click on Waybar's Wi-Fi icon),
 # strongest first: signal, a lock on secured ones, the current one ticked.
 # Picking one connects to it, asking for the password in fuzzel when it's a
-# secured network not saved yet. Last come Wi-Fi off (or on) and all settings.
-#
-#   wifi-menu             the list
-#   wifi-menu --settings  GNOME Settings' Wi-Fi page (right-click)
+# secured network not saved yet. Last come Wi-Fi off (or on) and all settings,
+# GNOME Settings' Wi-Fi page.
 
 settings() { exec env XDG_CURRENT_DESKTOP=GNOME gnome-control-center wifi; }
-[[ $1 == --settings ]] && settings
 
 note() { notify-send -a Wi-Fi -i network-wireless "$@"; }
 
