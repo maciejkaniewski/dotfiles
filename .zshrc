@@ -285,7 +285,48 @@ o() {
 
 # vs, nv — VS Code and Neovim on the given files or folders, or on this folder
 # when given none: `vs` is `code .`, `nv` is `nvim .`.
-vs() { code "${@:-.}" }
+#
+# Under niri, vs keeps VS Code on this workspace. The VS Code window here
+# nearest this terminal (by column; of two as near, the one used last) is
+# focused first, so files open in it rather than in the last one used
+# elsewhere. A new folder opens in a new window, which niri puts here. A folder
+# already open in a window on another workspace (VS Code never opens one twice,
+# it focuses that window), or a file inside one, brings that window here.
+vs() {
+  if [[ -z $NIRI_SOCKET ]] || (( ! $+commands[jq] )); then
+    code "${@:-.}"
+    return
+  fi
+  local is_code='(.app_id // "") | test("^code(_code)?$")' ws col here before
+  ws=$(niri msg -j workspaces | jq '.[] | select(.is_focused) | .id')
+  col=$(niri msg -j focused-window | jq '.layout.pos_in_scrolling_layout[0] // empty')
+  here=$(niri msg -j windows | jq --argjson ws "$ws" --argjson col "${col:-null}" "
+    [.[] | select(($is_code) and .workspace_id == \$ws)]
+    | min_by([(if \$col == null then 0 else (.layout.pos_in_scrolling_layout[0] // 1e6) - \$col end
+               | if . < 0 then -. else . end),
+              -((.focus_timestamp.secs // 0) * 1e9 + (.focus_timestamp.nanos // 0))])
+    | .id // empty")
+  if [[ -n $here ]]; then
+    niri msg action focus-window --id "$here"
+    sleep 0.2  # long enough for VS Code to count it as its last-used window
+  fi
+  before=$(niri msg -j focused-window | jq '.id // empty')
+  code "${@:-.}"
+  # VS Code focuses the window it used; if that's on another workspace, move
+  # it here (by workspace id, which niri msg can't take, so over the socket).
+  {
+    local i f
+    for i in {1..50}; do
+      sleep 0.1
+      f=($(niri msg -j focused-window | jq -r "\"\(.id) \($is_code) \(.workspace_id)\""))
+      [[ ${f[1]} == "$before" ]] && continue
+      [[ ${f[2]} == true && ${f[3]} != "$ws" ]] &&
+        print -r -- "{\"Action\":{\"MoveWindowToWorkspace\":{\"window_id\":${f[1]},\"reference\":{\"Id\":$ws},\"focus\":true}}}" |
+          nc -UN "$NIRI_SOCKET" >/dev/null
+      break
+    done
+  } &!
+}
 nv() { nvim "${@:-.}" }
 
 # direnv — the hook that loads and unloads a directory's .envrc as you cd
