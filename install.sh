@@ -2477,12 +2477,13 @@ WAYBAR_BUILD_DEPS=(libgtkmm-3.0-dev libjsoncpp-dev libfmt-dev libspdlog-dev libg
 # wallpaper, the polkit password prompt, the media keys,
 # clipboard history, the sound mixer Waybar opens, Thunar, and
 # Pillow, which recolours the community wallpapers.
-# pactl and gdbus are for .local/bin/osd; wdisplays arranges screens; Python's
-# GTK 4 and libadwaita draw night light's warmth slider (the night light itself
-# is from crates.io).
+# pactl and gdbus are for .local/bin/osd; amixer reads the monitors' names for
+# .local/bin/sound-output; wdisplays arranges screens; Python's GTK 4 and
+# libadwaita draw night light's warmth slider (the night light itself is from
+# crates.io).
 NIRI_SESSION_PKGS=(xwayland fuzzel mako-notifier swaylock swayidle swaybg policykit-1-gnome
   playerctl cliphist wl-clipboard pulsemixer papirus-icon-theme thunar python3-pil
-  pulseaudio-utils libglib2.0-bin wdisplays python3-gi gir1.2-gtk-4.0 gir1.2-adw-1)
+  pulseaudio-utils alsa-utils libglib2.0-bin wdisplays python3-gi gir1.2-gtk-4.0 gir1.2-adw-1)
 
 # Ubuntu 22.04 (anything before 24.04) gets the same desktop with more of it
 # built from source, at the pins under "Ubuntu 22.04 only" in the versions file.
@@ -2518,6 +2519,9 @@ NIRI_LINKS=(
   "niri|$DOTFILES/.local/bin/waybar-cast:$HOME/.local/bin/waybar-cast"
   "niri|$DOTFILES/.local/bin/launcher-icons:$HOME/.local/bin/launcher-icons"
   "niri|$DOTFILES/.local/bin/night-light:$HOME/.local/bin/night-light"
+  "niri|$DOTFILES/.local/bin/sound-output:$HOME/.local/bin/sound-output"
+  "niri|$DOTFILES/.local/bin/wifi-menu:$HOME/.local/bin/wifi-menu"
+  "niri|$DOTFILES/.config/autostart/nm-applet.desktop:$HOME/.config/autostart/nm-applet.desktop"
 )
 # xwayland-satellite has no --version, so the build records what it installed.
 XWS_STAMP=/usr/local/share/dotfiles/xwayland-satellite.version

@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# sound-output: pick where sound plays, in fuzzel (right-click on Waybar's
+# volume). Lists the outputs that can play now, a monitor's speakers by the
+# monitor's name, with the current one ticked and a mute switch last. The pick
+# becomes the default and takes the sound that's playing along with it.
+
+
+# The name of the monitor on card $1's HDMI/DisplayPort output $2, from its ELD:
+# the name's length is in byte 4, and the name starts at byte 20.
+monitor() {
+    local values bytes name="" b
+    values=$(amixer -c "$1" cget iface=PCM,name=ELD,device="$2" 2>/dev/null | grep -oP ': values=\K.*')
+    IFS=, read -ra bytes <<< "$values"
+    (( ${#bytes[@]} > 20 )) || return
+    for b in "${bytes[@]:20:$(( bytes[4] & 0x1f ))}"; do
+        name+=$(printf '%b' "\\x$(printf %02x "$b")")
+    done
+    echo "$name"
+}
+
+# One line per output: name, bus, ALSA card and device, product, the active
+# port's description and type, and whether that port can play now.
+outputs() {
+    # Unlocalised, for its field names; only pactl, as fuzzel needs UTF-8.
+    LC_ALL=C pactl list sinks | awk -F': ' '
+        function emit() { if (name != "") print name "\t" bus "\t" card "\t" dev "\t" product "\t" pdesc[active] "\t" ptype[active] "\t" (gone[active] ? 0 : 1) }
+        function value(line) { sub(/^[^=]*= "/, "", line); sub(/"$/, "", line); return line }
+        /^Sink #/ { emit(); name = bus = card = dev = product = active = ""; delete pdesc; delete ptype; delete gone }
+        /^\tName: / { name = $2 }
+        /^\t\tdevice\.bus = / { bus = value($0) }
+        /^\t\talsa\.card = / { card = value($0) }
+        /^\t\talsa\.device = / { dev = value($0) }
+        /^\t\tdevice\.description = / { product = value($0) }
+        /^\t\t[^\t].*\(type: / {
+            port = $1; sub(/^\t\t/, "", port)
+            d = substr($0, index($0, ": ") + 2); sub(/ \(type: .*/, "", d); pdesc[port] = d
+            t = $0; sub(/.*\(type: /, "", t); sub(/,.*/, "", t); ptype[port] = t
+            gone[port] = ($0 ~ /not available\)$/)
+        }
+        /^\tActive Port: / { active = $2 }
+        END { emit() }'
+}
+
+current=$(pactl get-default-sink)
+names=() lines=()
+while IFS=$'\t' read -r name bus card dev product port type ok; do
+    (( ok )) || continue
+    label="" icon="󰓃"
+    if [[ $type == HDMI ]]; then
+        icon="󰍹"
+        label=$(monitor "$card" "$dev")
+    elif [[ $bus == bluetooth || $type == Headphones || $type == Headset ]]; then
+        icon="󰋋"
+    fi
+    if [[ -z $label ]]; then
+        # A built-in card is known by its port ("Speaker", "HDMI / DisplayPort 2
+        # Output"), anything plugged in by its product name.
+        if [[ $bus == pci && -n $port ]]; then label="Built-in $port"; else label=$product; fi
+    fi
+    [[ $name == "$current" ]] && label+="  ✓"
+    names+=("$name") lines+=("$icon  $label")
+done < <(outputs)
+
+if [[ $(LC_ALL=C pactl get-sink-mute @DEFAULT_SINK@) == *yes ]]; then lines+=("󰕾  Unmute"); else lines+=("󰝟  Mute"); fi
+
+width=0
+for line in "${lines[@]}"; do (( ${#line} > width )) && width=${#line}; done
+pick=$(printf '%s\n' "${lines[@]}" \
+    | fuzzel --dmenu --index --prompt "Sound to: " --lines ${#lines[@]} --width $(( width + 4 ))) || exit 0
+# Typed text that matches nothing comes back as itself, not an index.
+[[ $pick =~ ^[0-9]+$ ]] || exit 0
+
+if (( pick == ${#names[@]} )); then
+    pactl set-sink-mute @DEFAULT_SINK@ toggle
+    exit
+fi
+sink=${names[pick]}
+pactl set-default-sink "$sink"
+pactl list short sink-inputs | while read -r id _; do pactl move-sink-input "$id" "$sink"; done

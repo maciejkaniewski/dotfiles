@@ -25,18 +25,27 @@ window#waybar {
    screen the clock can't run into the readouts beside it. */
 .modules-center { margin: 0 6px; }
 
+/* A shade short of solid on purpose: GTK 3 tells the compositor a solid
+   tooltip is opaque edge to edge, rounded corners included (the corner radius
+   it would cut out comes from a frame that "*" squares off), so niri drew the
+   corners black. Anything less than solid, and niri blends them. */
 tooltip {
-    background: @bg;
+    background: alpha(@bg, 0.97);
     border: 2px solid @accent;
     border-radius: 10px;
 }
 
-/* The islands: workspaces, what's playing, clock, and the two groups on the right. */
+/* The islands: workspaces, what's playing, clock, and the groups on the right:
+   system readouts, apps' tray icons, then the controls by kind. */
 #workspaces,
 #mpris,
 #custom-clock,
 #system,
-#controls {
+#tray,
+#connect,
+#screen,
+#sound,
+#power {
     background: alpha(@surface, 0.6);
     border-radius: 10px;
     margin: 4px 0;
@@ -107,7 +116,7 @@ window#waybar.side #workspaces button {
 }
 
 #cpu, #memory, #custom-io, #custom-thermal, #custom-serial,
-#tray, #idle_inhibitor, #custom-night-light, #bluetooth, #pulseaudio, #power-profiles-daemon, #battery, #custom-power {
+#tray, #network, #idle_inhibitor, #custom-night-light, #bluetooth, #pulseaudio, #power-profiles-daemon, #battery, #custom-power {
     padding: 0 8px;
 }
 
@@ -121,11 +130,17 @@ window#waybar.side #workspaces button {
 #idle_inhibitor.activated { color: @date; }
 #custom-night-light       { color: @overlay; }
 #custom-night-light.warm  { color: @date; }
+#network                  { color: @time; }
+#network.disconnected     { color: @overlay; }
 #bluetooth                { color: @time; }
 #bluetooth.off,
 #bluetooth.disabled       { color: @overlay; }
 #pulseaudio               { color: @time; }
 #pulseaudio.muted         { color: @overlay; }
+/* The mic module is a pulseaudio one too, so it gets .muted with the sound. */
+#pulseaudio.mic,
+#pulseaudio.mic.muted     { color: @time; }
+#pulseaudio.mic.source-muted { color: @temp; }
 #power-profiles-daemon             { color: @time; }
 #power-profiles-daemon.performance { color: @cpu; }
 #power-profiles-daemon.power-saver { color: @bat; }

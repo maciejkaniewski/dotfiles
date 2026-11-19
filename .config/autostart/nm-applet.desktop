@@ -1,0 +1,9 @@
+# nm-applet, not started: in niri, Waybar's own network icon shows the Wi-Fi
+# and opens nmtui, and the applet's icon would be a second Wi-Fi among the apps
+# in the tray. This shadows /etc/xdg/autostart/nm-applet.desktop, which GNOME
+# and KDE skip already.
+[Desktop Entry]
+Name=NetworkManager Applet
+Exec=nm-applet
+Type=Application
+Hidden=true

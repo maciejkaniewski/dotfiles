@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# wifi-menu: nearby Wi-Fi networks in fuzzel (click on Waybar's Wi-Fi icon),
+# strongest first: signal, a lock on secured ones, the current one ticked.
+# Picking one connects to it, asking for the password in fuzzel when it's a
+# secured network not saved yet. Last come Wi-Fi off (or on) and all settings.
+#
+#   wifi-menu             the list
+#   wifi-menu --settings  GNOME Settings' Wi-Fi page (right-click)
+
+settings() { exec env XDG_CURRENT_DESKTOP=GNOME gnome-control-center wifi; }
+[[ $1 == --settings ]] && settings
+
+note() { notify-send -a Wi-Fi -i network-wireless "$@"; }
+
+# Fuzzel's list from lines on stdin, as wide as the longest line; prints the
+# picked line's index.
+menu() {
+    local lines=() line width=0
+    mapfile -t lines
+    for line in "${lines[@]}" "$prompt"; do (( ${#line} > width )) && width=${#line}; done
+    printf '%s\n' "${lines[@]}" \
+        | fuzzel --dmenu --index --prompt "$prompt" --lines ${#lines[@]} --width $(( width + 6 ))
+}
+
+# Whether a saved connection is for network $1 (its name can differ).
+saved() {
+    local type name
+    while IFS=: read -r type name; do
+        [[ $type == 802-11-wireless ]] || continue
+        name=${name//\\:/:}
+        [[ $(nmcli -g 802-11-wireless.ssid connection show "$name" 2>/dev/null) == "$1" ]] && return 0
+    done < <(nmcli -t -f TYPE,NAME connection show)
+    return 1
+}
+
+ssids=() lines=()
+if [[ $(nmcli radio wifi) == enabled ]]; then
+    # nmcli rescans first when its last scan is over 30 s old, which takes a few
+    # seconds: a notification says so if it does.
+    list=$(mktemp -p "${XDG_RUNTIME_DIR:-/tmp}")
+    trap 'rm -f "$list"' EXIT
+    nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID device wifi list --rescan auto > "$list" 2>/dev/null &
+    sleep 0.3
+    if kill -0 $! 2>/dev/null; then
+        id=$(gdbus call --session --dest org.freedesktop.Notifications \
+            --object-path /org/freedesktop/Notifications --method org.freedesktop.Notifications.Notify \
+            Wi-Fi 0 network-wireless "󰤨  Wi-Fi" "Looking for networks…" "[]" "{}" 10000 \
+            | grep -oP 'uint32 \K[0-9]+')
+    fi
+    wait
+    [[ -n $id ]] && gdbus call --session --dest org.freedesktop.Notifications \
+        --object-path /org/freedesktop/Notifications \
+        --method org.freedesktop.Notifications.CloseNotification "$id" >/dev/null
+
+    declare -A seen secured
+    # Terse fields are split on ":", with any ":" in a name escaped as "\:";
+    # the name comes last, so read takes all of it. Strongest first already,
+    # and a network with several access points listed once.
+    while IFS=: read -r inuse signal security ssid; do
+        ssid=${ssid//\\:/:}
+        [[ -n $ssid && -z ${seen[$ssid]} ]] || continue
+        seen[$ssid]=1
+        if (( signal >= 75 )); then icon=󰤨; elif (( signal >= 50 )); then icon=󰤥
+        elif (( signal >= 25 )); then icon=󰤢; else icon=󰤟; fi
+        line="$icon  $ssid"
+        [[ $security == "" || $security == "--" ]] || { line+="  󰌾"; secured[$ssid]=1; }
+        [[ $inuse == "*" ]] && { line+="  ✓"; current=$ssid; }
+        ssids+=("$ssid") lines+=("$line")
+    done < "$list"
+    lines+=("󰤭  Turn Wi-Fi off")
+else
+    lines+=("󰤨  Turn Wi-Fi on")
+fi
+lines+=("󰒓  All settings")
+
+prompt="Wi-Fi: "
+pick=$(printf '%s\n' "${lines[@]}" | menu) || exit 0
+# Typed text that matches nothing comes back as itself, not an index.
+[[ $pick =~ ^[0-9]+$ ]] || exit 0
+case ${lines[pick]} in
+    *"Turn Wi-Fi off") nmcli radio wifi off; exit ;;
+    *"Turn Wi-Fi on") nmcli radio wifi on; exit ;;
+    *"All settings") settings ;;
+esac
+
+ssid=${ssids[pick]}
+[[ $ssid == "$current" ]] && exit 0
+args=()
+if [[ -n ${secured[$ssid]} ]] && ! saved "$ssid"; then
+    prompt="Password for $ssid: "
+    password=$(fuzzel --dmenu --password --prompt "$prompt" --lines 0 --width $(( ${#prompt} + 24 )) < /dev/null) \
+        || exit 0
+    args=(password "$password")
+fi
+if out=$(nmcli device wifi connect "$ssid" "${args[@]}" 2>&1); then
+    note "Connected to $ssid"
+else
+    note -u critical "Couldn't connect to $ssid" "${out#Error: }"
+fi

@@ -16,7 +16,7 @@
         "include": ["~/.config/waybar/modules.jsonc"],
         "modules-left": ["niri/workspaces", "mpris"],
         "modules-center": ["custom/cast", "privacy", "custom/clock"],
-        "modules-right": ["group/system", "group/controls"]
+        "modules-right": ["group/system", "tray", "group/connect", "group/screen", "group/sound", "group/power"]
     },
     {
         "name": "side",

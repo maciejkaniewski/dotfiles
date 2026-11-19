@@ -13,9 +13,24 @@
         "orientation": "horizontal",
         "modules": ["cpu", "memory", "custom/io", "custom/thermal", "custom/serial"]
     },
-    "group/controls": {
+    // The controls, an island for each kind: apps' tray icons (the tray, in
+    // config.jsonc, is an island of its own), connections, the screen, sound,
+    // and power.
+    "group/connect": {
         "orientation": "horizontal",
-        "modules": ["tray", "idle_inhibitor", "custom/night-light", "bluetooth", "pulseaudio", "power-profiles-daemon", "battery", "battery#time", "custom/power"]
+        "modules": ["network", "bluetooth"]
+    },
+    "group/screen": {
+        "orientation": "horizontal",
+        "modules": ["idle_inhibitor", "custom/night-light"]
+    },
+    "group/sound": {
+        "orientation": "horizontal",
+        "modules": ["pulseaudio", "pulseaudio#mic"]
+    },
+    "group/power": {
+        "orientation": "horizontal",
+        "modules": ["power-profiles-daemon", "battery", "battery#time", "custom/power"]
     },
 
     // Each workspace's name or number, then an icon per window on it (from
@@ -118,10 +133,27 @@
         "restart-interval": 5,
         "on-click": "kitty --title ports -e ports -w"
     },
-    // The tray holds nm-applet's Wi-Fi icon (its menu lists networks and
-    // VPNs), which the session's XDG autostart starts.
+    // Apps' own icons (Slack and the like). It hides while it has none.
     "tray": {
         "spacing": 8
+    },
+    // Wi-Fi's signal, or the cable while on one; hover for the network and
+    // address. Click for nearby networks in fuzzel (.local/bin/wifi-menu),
+    // right-click for GNOME Settings' Wi-Fi page. The download and upload
+    // speeds are in the disk readout's tooltip (custom/io). nm-applet isn't
+    // started (.config/autostart/nm-applet.desktop), so its icon doesn't add
+    // a second Wi-Fi to the tray.
+    "network": {
+        "interval": 5,
+        "format-wifi": "{icon}",
+        "format-icons": ["󰤟", "󰤢", "󰤥", "󰤨"],
+        "format-ethernet": "󰈀",
+        "format-disconnected": "󰤭",
+        "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ipaddr}/{cidr}",
+        "tooltip-format-ethernet": "{ifname}\n{ipaddr}/{cidr}",
+        "tooltip-format-disconnected": "Offline",
+        "on-click": "wifi-menu",
+        "on-click-right": "wifi-menu --settings"
     },
     // Keep awake: while on, the idle lock and screen-off don't happen.
     "idle_inhibitor": {
@@ -130,8 +162,8 @@
         "tooltip-format-activated": "Staying awake (click to allow idle lock)",
         "tooltip-format-deactivated": "Idle lock on (click to stay awake)"
     },
-    // Night light (.local/bin/night-light): the moon while the screen is warm,
-    // the sun while it isn't. Click to switch it on or off now, overriding the
+    // Night light (.local/bin/night-light): the moon, yellow while the screen is
+    // warm and grey while it isn't. Click to switch it on or off now, overriding the
     // schedule; right-click for a warmth slider and the schedule's times, with
     // a button back to the schedule after such a click; scrolling steps the
     // warmth too. The minute interval catches the schedule's turns; a click
@@ -156,13 +188,27 @@
         "tooltip-format-enumerate-connected": "{device_alias}",
         "on-click": "kitty --title bluetui -e bluetui"
     },
+    // Click for pulsemixer; right-click to pick where sound plays, or mute
+    // (.local/bin/sound-output).
     "pulseaudio": {
         "format": "{icon} {volume}%",
         "format-muted": "󰝟",
         "format-icons": { "default": ["󰕿", "󰖀", "󰕾"], "headphone": "󰋋" },
         "tooltip-format": "{desc}",
         "on-click": "kitty --title pulsemixer -e pulsemixer",
-        "on-click-right": "pactl set-sink-mute @DEFAULT_SINK@ toggle"
+        "on-click-right": "sound-output"
+    },
+    // The mic, red and crossed out while muted; click to mute or unmute,
+    // through .local/bin/osd for its pop-up, as the mic-mute key does.
+    // Scrolling does nothing, so a call's mic can't change by accident.
+    "pulseaudio#mic": {
+        "format": "{format_source}",
+        "format-source": "󰍬",
+        "format-source-muted": "󰍭",
+        "tooltip-format": "{source_desc}",
+        "on-click": "osd mic mute",
+        "on-scroll-up": "",
+        "on-scroll-down": ""
     },
     // GNOME's power modes (power-profiles-daemon, which runs in any session).
     // Click for the next mode, right-click for the previous one.

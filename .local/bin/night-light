@@ -327,12 +327,12 @@ PY
     pkill -RTMIN+$signal -x waybar
 }
 
-# Waybar's JSON. Classes: warm or normal, and manual while a click overrides
-# the schedule.
+# Waybar's JSON: always the moon, which the classes colour. They're warm or
+# normal, and manual while a click overrides the schedule.
 status() {
     command -v wl-gammarelay-rs >/dev/null || return
-    local text class tip
-    if warm; then text="󰖔" class='"warm"'; else text="󰖙" class='"normal"'; fi
+    local text="󰖔" class tip
+    if warm; then class='"warm"'; else class='"normal"'; fi
     case $(mode),$class in
         auto,'"warm"') tip="Warm until $sunrise" ;;
         auto,*) tip="Warm from $sunset" ;;

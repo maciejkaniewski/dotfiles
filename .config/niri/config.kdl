@@ -60,7 +60,7 @@ layout {
 prefer-no-csd
 
 environment {
-    // nmtui (Waybar's network click) in the terminal's own colours, which the
+    // nmtui, if run, in the terminal's own colours, which the
     // theme picker sets, instead of newt's fixed blue and red.
     // Eclipse's DevStyle (STM32CubeIDE) asks for this at every start under
     // Wayland: WebKitGTK's compositing clashes with Java AWT there.
@@ -156,7 +156,7 @@ spawn-at-startup "ports" "--notify"
 spawn-at-startup "wl-paste" "--watch" "cliphist" "store"
 // Night light: warmer colours on a schedule (20:00 until 06:00 unless changed
 // in its slider), fading in and out over an hour. .local/bin/night-light
-// keeps running to follow it; Waybar's moon/sun button runs it too.
+// keeps running to follow it; Waybar's moon button runs it too.
 spawn-at-startup "night-light" "--start"
 // The wallpaper: the theme's glow (wallpapers/{variant}.svg) or one of its
 // family's blurred community ones (Super+Alt+W, .local/bin/wallpaper). The
@@ -231,11 +231,18 @@ layer-rule {
 // names its layers after its bars, main and side. Notifications have no blur:
 // mako's surface includes the margin around each one, so the blur showed as a
 // wide frosted frame outside its border. They're less see-through instead.
+// Waybar's pop-ups (tooltips, tray menus) have no blur either: it would fill
+// their whole rectangle, a frosted square around a tooltip's rounded corners.
 layer-rule {
     match namespace="^(main|side)$"
     geometry-corner-radius 14
     background-effect {
         blur true
+    }
+    popups {
+        background-effect {
+            blur false
+        }
     }
 }
 
@@ -263,7 +270,7 @@ window-rule {
     open-on-workspace "1"
 }
 
-// Night light's warmth slider (right-click on Waybar's moon/sun) pops up in
+// Night light's warmth slider (right-click on Waybar's moon) pops up in
 // the top-right corner, where notifications do.
 window-rule {
     match app-id=r#"^dotfiles\.NightLight$"#
