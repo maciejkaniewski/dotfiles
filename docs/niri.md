@@ -113,7 +113,7 @@ The volume, brightness and media keys work as usual, also on the lock screen.
 ## Look
 
 - The focused window has a gradient focus ring (the theme's accent into its second colour) and a soft glow in the accent colour. Windows you're not in fade slightly (92% opacity).
-- Floating windows cast a deeper drop shadow and blur what's behind them, so they read as lifted above the tiles.
+- Floating windows cast a deeper drop shadow and blur what's behind them, so they read as lifted above the tiles. They blur the windows under them too (`xray false`); niri's default blur shows only the wallpaper and skips them. That kind of blur is experimental in niri: it's redone whenever the window moves, and it's missing during the window's open and close animations.
 - A window shared in a call has a red border for as long as it's shared.
 - The wallpaper sits in the overview's backdrop, so in `Super+O` the workspaces float over it; workspaces themselves are transparent, so it shows behind windows as usual.
 - GTK apps take the theme's colours. libadwaita apps (Files, Settings, Calculator, file pickers) ignore the GTK theme and draw with libadwaita's named colours, which `.config/gtk-3.0/{variant}.css` redefines; GTK 3 apps draw with the same ones under adw-gtk3, which `--niri` downloads into `~/.local/share/themes` (without it, they get the Yaru accent closest to the theme: purple, or olive for Gruvbox).

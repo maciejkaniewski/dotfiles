@@ -192,7 +192,10 @@ window-rule {
 }
 
 // Floating windows (dialogs, nmtui, the calculator) cast a deeper shadow and
-// blur what's behind them, so they read as lifted above the tiles.
+// blur what's behind them, so they read as lifted above the tiles. The windows
+// under them included: niri's default (xray) blurs only the wallpaper and
+// skips them. That kind is experimental in niri: redone whenever the window
+// moves, and gone during its open and close animations.
 window-rule {
     match is-floating=true
     shadow {
@@ -204,6 +207,7 @@ window-rule {
     }
     background-effect {
         blur true
+        xray false
     }
 }
 
