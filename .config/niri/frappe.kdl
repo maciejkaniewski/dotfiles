@@ -5,6 +5,11 @@ layout {
         inactive-color "#737994"
         urgent-color "#e78284"
     }
+    // Where a window dragged with Super will land: the focus ring's gradient,
+    // half see-through so the windows under it still show.
+    insert-hint {
+        gradient from="#babbf180" to="#ca9ee680" angle=45 relative-to="workspace-view"
+    }
     shadow {
         color "#232634aa"
     }
