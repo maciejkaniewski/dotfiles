@@ -3296,8 +3296,11 @@ apply_theme() {
         && log_ok "${SUBTEXT}GTK theme → $gtk_theme${RESET}"
     fi
     if [[ -d /usr/share/icons/Papirus-Dark ]]; then
-      gsettings set org.gnome.desktop.interface icon-theme Papirus-Dark \
-        && log_ok "${SUBTEXT}icon theme → Papirus-Dark${RESET}"
+      local icons=Papirus-Dark accent
+      accent=$(grep -oP '@define-color accent_bg_color\s+\K#[0-9a-fA-F]{6}' "$DOTFILES/.config/gtk-3.0/${stub}.css" 2>/dev/null)
+      [[ -n "$accent" ]] && papirus_folders "$accent" && icons="${PAPIRUS_FOLDERS##*/}"
+      gsettings set org.gnome.desktop.interface icon-theme "$icons" \
+        && log_ok "${SUBTEXT}icon theme → $icons${RESET}"
     fi
     write_gtk3_settings
   fi
@@ -3342,6 +3345,57 @@ write_gtk3_settings() {
   } > "$out.tmp" && mv "$out.tmp" "$out" \
     && log_ok "${SUBTEXT}GTK 3 settings.ini (for X11 apps) → $(gsettings get org.gnome.desktop.interface gtk-theme | tr -d "'")${RESET}" \
     || log_error "GTK 3 settings" "could not write ${out#"$HOME/"}"
+}
+
+# Papirus's folders in the theme's accent $1 rather than its blue: an icon
+# theme in front of Papirus-Dark with recoloured copies of its blue folder
+# icons, and the links its plain names (folder.svg, user-home.svg, ...) make
+# to them. Papirus draws a folder in three shades of one colour, the darker
+# two 80% and 35% of the first, so any accent gets the same. 16 px folders
+# are grey outlines in Papirus-Dark, so they stay.
+PAPIRUS_FOLDERS="${XDG_DATA_HOME:-$HOME/.local/share}/icons/Papirus-Dark-dotfiles"
+papirus_folders() {
+  local accent="$1" src=/usr/share/icons/Papirus-Dark tmp="$PAPIRUS_FOLDERS.new" size dir real i dark glyph
+  local r=$((16#${accent:1:2})) g=$((16#${accent:3:2})) b=$((16#${accent:5:2}))
+  local -a dirs=() files=() links=() targets=()
+  printf -v dark '#%02x%02x%02x' $((r * 80 / 100)) $((g * 80 / 100)) $((b * 80 / 100))
+  printf -v glyph '#%02x%02x%02x' $((r * 35 / 100)) $((g * 35 / 100)) $((b * 35 / 100))
+  rm -rf "$tmp"
+  for size in 22 24 32 48 64; do
+    dir="${size}x${size}/places"
+    [[ -d "$src/$dir" ]] || continue
+    mkdir -p "$tmp/$dir" || return 1
+    real=$(readlink -f "$src/$dir")
+    # The blue variants: files recoloured, links among them copied as links.
+    mapfile -t files < <(find "$src/$dir/" -maxdepth 1 -type f \( -name '*-blue.svg' -o -name '*-blue-*.svg' \))
+    mapfile -t links < <(find "$src/$dir/" -maxdepth 1 -type l)
+    (( ${#files[@]} )) || continue
+    cp -t "$tmp/$dir" "${files[@]}" \
+      && sed -i -e "s/#5294e2/$accent/gI" -e "s/#4877b1/$dark/gI" -e "s/#1d344f/$glyph/gI" "$tmp/$dir"/*.svg \
+      || return 1
+    # Every link that ends at one of them, beside it in the same directory.
+    mapfile -t targets < <(readlink -f -- "${links[@]}")
+    for i in "${!links[@]}"; do
+      [[ "${targets[i]%/*}" == "$real" && "${targets[i]##*/}" =~ -blue(-|\.svg$) ]] \
+        && cp -P "${links[i]}" "$tmp/$dir/"
+    done
+    ln -s "${size}x${size}" "$tmp/${size}x${size}@2x"
+    dirs+=("$dir" "${size}x${size}@2x/places")
+  done
+  (( ${#dirs[@]} )) || return 1
+  {
+    echo "[Icon Theme]"
+    echo "Name=${PAPIRUS_FOLDERS##*/}"
+    echo "Comment=Papirus-Dark with folders in the colour theme's accent ($accent), made by install.sh --theme"
+    echo "Inherits=Papirus-Dark"
+    echo "Directories=$(IFS=,; echo "${dirs[*]}")"
+    for dir in "${dirs[@]}"; do
+      printf '\n[%s]\nContext=Places\nSize=%s\n' "$dir" "${dir%%x*}"
+      [[ "$dir" == *@2x/* ]] && echo "Scale=2"
+      echo "Type=Fixed"
+    done
+  } > "$tmp/index.theme" || return 1
+  rm -rf "$PAPIRUS_FOLDERS" && mv "$tmp" "$PAPIRUS_FOLDERS"
 }
 
 configure_theme() {
