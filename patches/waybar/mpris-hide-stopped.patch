@@ -1,0 +1,19 @@
+A stopped player hides the module, as no player does. Upstream skips the
+update instead, so the last title stays on the bar as if still playing: a
+browser tab keeps its player after a video ends (LinkedIn's feed, say), and
+clicking the frozen title does nothing. install.sh applies patches/waybar/ on
+every machine.
+
+--- a/src/modules/mpris/mpris.cpp
++++ b/src/modules/mpris/mpris.cpp
+@@ -849,7 +849,9 @@
+   }
+ 
+   if (info.status == PLAYERCTL_PLAYBACK_STATUS_STOPPED) {
+-    spdlog::debug("mpris[{}]: player stopped, skipping update", info.name);
++    spdlog::debug("mpris[{}]: player stopped, hiding", info.name);
++    event_box_.set_visible(false);
++    ALabel::update();
+     return;
+   }
+ 

@@ -1,7 +1,7 @@
 Ubuntu 22.04 only: its gcc 11 has no std::format. This is the one use of it
 that the date library doesn't stand in for, in the Hyprland language module
 (unused here, but always built); fmt, which Waybar already uses, has the same
-call. install.sh applies patches/waybar/ only on Ubuntu before 24.04.
+call. install.sh applies patches/waybar/22.04/ only on Ubuntu before 24.04.
 
 diff --git a/src/modules/hyprland/language.cpp b/src/modules/hyprland/language.cpp
 index 51b25af..752a272 100644

@@ -2529,6 +2529,8 @@ XWS_STAMP=/usr/local/share/dotfiles/xwayland-satellite.version
 # swaylock-effects is patched (patches/swaylock-effects/), and only a build
 # that applied the patches writes this, so an unpatched one gets rebuilt.
 SLE_STAMP=/usr/local/share/dotfiles/swaylock-effects.version
+# Waybar likewise (patches/waybar/, and patches/waybar/22.04/ there).
+WAYBAR_STAMP=/usr/local/share/dotfiles/waybar.version
 
 # Newest release tag of GitHub repo $1, without a leading v. github_latest only
 # matches X.Y.Z, and niri numbers its releases YY.MM.
@@ -2542,13 +2544,26 @@ sle_patch_hash() {
   cat "$DOTFILES"/patches/swaylock-effects/*.patch | sha256sum | cut -c1-12
 }
 
+# The Waybar patches this machine applies, and their short hash for its stamp.
+waybar_patches() {
+  printf '%s\n' "$DOTFILES"/patches/waybar/*.patch
+  niri_old_ubuntu && printf '%s\n' "$DOTFILES"/patches/waybar/22.04/*.patch
+}
+waybar_patch_hash() {
+  local patches; mapfile -t patches < <(waybar_patches)
+  cat "${patches[@]}" | sha256sum | cut -c1-12
+}
+
 niri_installed_version() {
   case "$1" in
     niri)               [[ -x "$NIRI_BIN" ]] && "$NIRI_BIN" --version 2>/dev/null | awk '{print $2}' ;;
     # A Waybar built before libplayerctl-dev was a dependency has no media
-    # player module (mpris), so it counts as missing and gets rebuilt.
-    waybar)             [[ -x /usr/local/bin/waybar ]] && ldd /usr/local/bin/waybar | grep -q libplayerctl \
-                          && /usr/local/bin/waybar --version 2>/dev/null | grep -oP 'v\K[0-9.]+' ;;
+    # player module (mpris), so it counts as missing and gets rebuilt; so does
+    # one built with other patches than today's (its stamp's hash).
+    waybar)             [[ -x /usr/local/bin/waybar && -f "$WAYBAR_STAMP" ]] || return 0
+                        ldd /usr/local/bin/waybar | grep -q libplayerctl || return 0
+                        local wv wh; read -r wv wh < "$WAYBAR_STAMP"
+                        [[ "$wh" == "$(waybar_patch_hash)" ]] && echo "$wv" ;;
     xwayland-satellite) [[ -x /usr/local/bin/xwayland-satellite && -f "$XWS_STAMP" ]] && cat "$XWS_STAMP" ;;
     # The stamp also records which patches the build applied, so changing a
     # patch rebuilds it like a version bump would.
@@ -2616,19 +2631,22 @@ xws_build_install() {
 # subprojects; static, so nothing beyond the waybar binary lands in /usr/local.
 # On 22.04 it also takes fmt from a subproject (22.04's fmt 8 doesn't compile
 # with its gcc 11 here), wayland-protocols from /opt/niri-deps, and the patches
-# in patches/waybar/ for gcc 11.
+# in patches/waybar/22.04/ for gcc 11. The patches in patches/waybar/ apply
+# everywhere.
 waybar_build_install() {
-  local patch extra=() pc=""
+  local version="$1" patch extra=() pc=""
+  while read -r patch; do
+    git apply "$patch" || return 1
+  done < <(waybar_patches)
   if niri_old_ubuntu; then
-    for patch in "$DOTFILES"/patches/waybar/*.patch; do
-      git apply "$patch" || return 1
-    done
     extra=("--force-fallback-for=fmt,spdlog"); pc="$NIRI_DEPS/share/pkgconfig"
   fi
   PKG_CONFIG_PATH="$pc" meson setup build --prefix=/usr/local --buildtype=release -Ddefault_library=static \
       -Dman-pages=disabled -Dtests=disabled "${extra[@]}" \
     && ninja -C build \
-    && sudo install -m 755 build/waybar /usr/local/bin/
+    && sudo install -m 755 build/waybar /usr/local/bin/ \
+    && sudo install -Dm 644 /dev/null "$WAYBAR_STAMP" \
+    && printf '%s %s\n' "$version" "$(waybar_patch_hash)" | sudo tee "$WAYBAR_STAMP" >/dev/null
 }
 
 # swaylock-effects: swaylock plus a clock (and effects we don't use), for
