@@ -178,6 +178,11 @@ switch-events {
 window-rule {
     geometry-corner-radius 12
     clip-to-geometry true
+    // niri fills the focus ring in behind apps that draw their own title bar
+    // (all libadwaita ones), and a see-through one showed it through its
+    // whole window. Every window is clipped to these corners, so the ring
+    // only needs drawing around the edge.
+    draw-border-with-background false
 }
 
 // Windows you're not in fade slightly, so the one you are in stands out.
