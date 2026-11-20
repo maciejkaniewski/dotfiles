@@ -24,6 +24,10 @@ dotfiles/
 │   │   └── tab_bar.py
 │   ├── fuzzel/
 │   │   └── {variant}.ini              # niri's launcher, one whole config per theme (fuzzel has no include)
+│   ├── gtk-3.0/
+│   │   └── {variant}.css              # GTK apps' colours (libadwaita and adw-gtk3); ~/.config/gtk-3.0/gtk.css links to one
+│   ├── gtk-4.0/
+│   │   └── gtk.css                    # libadwaita apps: imports those colours, frosted like kitty
 │   ├── lazygit/
 │   │   ├── config.yml
 │   │   └── {variant}.yml              # Catppuccin/Gruvbox/Dracula theme per variant, merged via LG_CONFIG_FILE

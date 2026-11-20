@@ -2523,7 +2523,12 @@ NIRI_LINKS=(
   "niri|$DOTFILES/.local/bin/wifi-menu:$HOME/.local/bin/wifi-menu"
   "niri|$DOTFILES/.local/bin/bluetooth-menu:$HOME/.local/bin/bluetooth-menu"
   "niri|$DOTFILES/.config/autostart/nm-applet.desktop:$HOME/.config/autostart/nm-applet.desktop"
+  "niri|$DOTFILES/.config/gtk-4.0/gtk.css:$HOME/.config/gtk-4.0/gtk.css"
 )
+# adw-gtk3 draws GTK 3 apps with libadwaita's named colours, so they take the
+# theme's (.config/gtk-3.0/{variant}.css) as libadwaita apps do. Ubuntu doesn't
+# package it; its release goes here, with the version it was in a file beside.
+ADW_GTK3_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/themes"
 # xwayland-satellite has no --version, so the build records what it installed.
 XWS_STAMP=/usr/local/share/dotfiles/xwayland-satellite.version
 # swaylock-effects is patched (patches/swaylock-effects/), and only a build
@@ -2565,6 +2570,7 @@ niri_installed_version() {
                         local wv wh; read -r wv wh < "$WAYBAR_STAMP"
                         [[ "$wh" == "$(waybar_patch_hash)" ]] && echo "$wv" ;;
     xwayland-satellite) [[ -x /usr/local/bin/xwayland-satellite && -f "$XWS_STAMP" ]] && cat "$XWS_STAMP" ;;
+    adw-gtk3)           [[ -f "$ADW_GTK3_DIR/adw-gtk3-dark/dotfiles.version" ]] && cat "$ADW_GTK3_DIR/adw-gtk3-dark/dotfiles.version" ;;
     # The stamp also records which patches the build applied, so changing a
     # patch rebuilds it like a version bump would.
     swaylock-effects)   [[ -x /usr/local/bin/swaylock && -f "$SLE_STAMP" ]] || return 0
@@ -2683,6 +2689,41 @@ install_niri_component() {
   run_spin "building $key $want (a few minutes)..." build_github_tag "$key" "$repo" "$prefix$want" "$step" "$want" \
     && log_ok "$key $want installed in /usr/local/bin" \
     || { log_error "$key" "build failed"; return 1; }
+}
+
+# adw-gtk3 $1's release, unpacked beside rather than over the old copy, so a
+# failed download leaves that one in place. Without its GTK 4 part: that needs
+# GTK 4.16's CSS variables, and on 24.04's 4.14 every plain GTK 4 app logged
+# hundreds of parse errors. GTK's own Adwaita draws those apps instead, and
+# libadwaita apps never use a GTK theme.
+adw_gtk3_download() {
+  local want="$1" tmp
+  tmp=$(mktemp -d -p "$SCRIPT_TMPDIR") \
+    && curl -fsSL -o "$tmp/adw-gtk3.tar.xz" \
+      "https://github.com/lassekongo83/adw-gtk3/releases/download/v$want/adw-gtk3v$want.tar.xz" \
+    && tar -xJf "$tmp/adw-gtk3.tar.xz" -C "$tmp" \
+    && [[ -d "$tmp/adw-gtk3" && -d "$tmp/adw-gtk3-dark" ]] \
+    && rm -rf "$tmp/adw-gtk3/gtk-4.0" "$tmp/adw-gtk3-dark/gtk-4.0" \
+    && mkdir -p "$ADW_GTK3_DIR" \
+    && rm -rf "$ADW_GTK3_DIR/adw-gtk3" "$ADW_GTK3_DIR/adw-gtk3-dark" \
+    && mv "$tmp/adw-gtk3" "$tmp/adw-gtk3-dark" "$ADW_GTK3_DIR/" \
+    && echo "$want" > "$ADW_GTK3_DIR/adw-gtk3-dark/dotfiles.version"
+}
+
+install_adw_gtk3() {
+  local pin want have
+  pin=$(tool_pin adw-gtk3)
+  if [[ -n "$pin" ]]; then
+    want="$pin"
+  else
+    run_spin_capture "checking latest adw-gtk3..." want github_latest_tag lassekongo83/adw-gtk3
+    [[ -n "$want" ]] || { log_error "adw-gtk3" "could not resolve the latest release — network down?"; return 1; }
+  fi
+  have=$(niri_installed_version adw-gtk3)
+  needs_install adw-gtk3 "$have" "$want" "$pin" || return 0
+  run_spin "downloading adw-gtk3 $want..." adw_gtk3_download "$want" \
+    && log_ok "adw-gtk3 $want in ${ADW_GTK3_DIR/#$HOME/\~}" \
+    || { log_error "adw-gtk3" "download failed"; return 1; }
 }
 
 # ── niri desktop on Ubuntu 22.04 ──
@@ -3007,6 +3048,7 @@ install_niri_desktop() {
   niri_old_ubuntu && install_niri_old_session
   install_niri_component waybar Alexays/Waybar "" waybar_build_install
   install_niri_component swaylock-effects jirutka/swaylock-effects v swaylock_effects_build_install
+  install_adw_gtk3
   for crate in "${NIRI_CRATES[@]}"; do install_crate "$crate"; done
 
   local section_l src dst
@@ -3179,7 +3221,7 @@ apply_theme() {
   # The niri session's own tools, only where --niri installed it.
   if [[ -x "$NIRI_BIN" ]]; then
     mkdir -p "$HOME/.config/niri" "$HOME/.config/waybar" "$HOME/.config/fuzzel" \
-      "$HOME/.config/mako" "$HOME/.config/swaylock"
+      "$HOME/.config/mako" "$HOME/.config/swaylock" "$HOME/.config/gtk-3.0"
     # The wallpaper: the theme's glow, unless one of the community wallpapers
     # is picked (Super+Alt+W, .local/bin/wallpaper). Each variant has its own
     # recoloured copy, so switching between variants of a family keeps the
@@ -3196,6 +3238,7 @@ apply_theme() {
       "$DOTFILES/.config/fuzzel/${stub}.ini:$HOME/.config/fuzzel/fuzzel.ini:fuzzel theme → ${label}"
       "$DOTFILES/.config/mako/${stub}.conf:$HOME/.config/mako/config:mako theme → ${label}"
       "$DOTFILES/.config/swaylock/${stub}.conf:$HOME/.config/swaylock/config:swaylock theme → ${label}"
+      "$DOTFILES/.config/gtk-3.0/${stub}.css:$HOME/.config/gtk-3.0/gtk.css:GTK apps' colours → ${label}"
       "$wp_target:$HOME/.config/niri/wallpaper:wallpaper → ${wp_target##*/}"
     )
   fi
@@ -3239,15 +3282,18 @@ apply_theme() {
 
   command_exists bat && bat cache --build &>/dev/null
 
-  # GTK apps (Settings, Files, dialogs) in the Yaru accent closest to the
-  # theme, and Papirus icons where installed (--niri installs them). Both are
-  # GNOME-wide settings, so GNOME follows too.
+  # GTK 3 apps in adw-gtk3, which takes the theme's colours, where --niri
+  # installed it, or else in the Yaru accent closest to the theme; and Papirus
+  # icons where installed (--niri installs them too). Both are GNOME-wide
+  # settings, so GNOME follows too.
   if command_exists gsettings; then
-    local yaru=purple
+    local yaru=purple gtk_theme
     [[ "$family" == gruvbox ]] && yaru=olive
-    if [[ -d "/usr/share/themes/Yaru-$yaru-dark" ]]; then
-      gsettings set org.gnome.desktop.interface gtk-theme "Yaru-$yaru-dark" \
-        && log_ok "${SUBTEXT}GTK theme → Yaru-$yaru-dark${RESET}"
+    gtk_theme="Yaru-$yaru-dark"
+    [[ -d "$ADW_GTK3_DIR/adw-gtk3-dark" ]] && gtk_theme=adw-gtk3-dark
+    if [[ -d "$ADW_GTK3_DIR/$gtk_theme" || -d "/usr/share/themes/$gtk_theme" ]]; then
+      gsettings set org.gnome.desktop.interface gtk-theme "$gtk_theme" \
+        && log_ok "${SUBTEXT}GTK theme → $gtk_theme${RESET}"
     fi
     if [[ -d /usr/share/icons/Papirus-Dark ]]; then
       gsettings set org.gnome.desktop.interface icon-theme Papirus-Dark \
@@ -3690,7 +3736,7 @@ verify_ser2net() {
 # are present and the config, with its theme and local includes, parses.
 verify_niri() {
   local key v versions=""
-  for key in niri xwayland-satellite waybar swaylock-effects; do
+  for key in niri xwayland-satellite waybar swaylock-effects adw-gtk3; do
     v=$(niri_installed_version "$key")
     [[ -n "$v" ]] || { echo "$key missing (run --niri)"; return 1; }
     versions+="$key $v, "
@@ -3982,6 +4028,7 @@ cmd_clean() {
     "$HOME/.config/fuzzel/fuzzel.ini:$DOTFILES/.config/fuzzel/"
     "$HOME/.config/mako/config:$DOTFILES/.config/mako/"
     "$HOME/.config/swaylock/config:$DOTFILES/.config/swaylock/"
+    "$HOME/.config/gtk-3.0/gtk.css:$DOTFILES/.config/gtk-3.0/"
     "$HOME/.config/niri/wallpaper:$DOTFILES/.config/niri/wallpapers/"
     "$HOME/.config/niri/wallpaper:${XDG_DATA_HOME:-$HOME/.local/share}/wallpapers/"
     "$HOME/.config/niri/wallpaper.svg:$DOTFILES/.config/niri/wallpapers/"

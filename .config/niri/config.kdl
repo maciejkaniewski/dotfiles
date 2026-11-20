@@ -211,6 +211,15 @@ window-rule {
     }
 }
 
+// libadwaita apps are see-through too (.config/gtk-4.0/gtk.css); their app
+// IDs start with org.gnome.
+window-rule {
+    match app-id=r#"^org\.gnome\."#
+    background-effect {
+        blur true
+    }
+}
+
 // The wallpaper also fills the overview's backdrop (Super+O), behind the
 // zoomed-out workspaces, instead of a flat colour.
 layer-rule {

@@ -1,0 +1,26 @@
+/* libadwaita apps (Files, Settings, Calculator, file pickers): the theme's
+   colours, shared with GTK 3 apps, then frosted like kitty. */
+@import url("../gtk-3.0/gtk.css");
+
+/* Only the window's own background and the sidebar's are see-through, and
+   niri blurs what's behind them (its rule for org.gnome.* apps). The named
+   colours stay solid: libadwaita mixes them into others, so a see-through
+   view colour would make switch knobs see-through too. Menus and dialogs
+   stay solid. */
+window.background {
+    background-color: alpha(@window_bg_color, 0.7);
+}
+.sidebar-pane {
+    background-color: alpha(@sidebar_bg_color, 0.5);
+}
+
+/* In a narrow window Files' sidebar slides over the files; dim them almost
+   away behind it, or they'd show through. */
+overlay-split-view > dimming {
+    background-color: alpha(@window_bg_color, 0.9);
+}
+
+/* Files paints its whole content pane as a view on top of the window. */
+window.nautilus-window .view {
+    background-color: transparent;
+}
