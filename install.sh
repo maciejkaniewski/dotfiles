@@ -2958,7 +2958,18 @@ output "$connector" {
     scale $scale
 }
 EOF
-  # niri applies it at once; swaybg 1.0 (22.04) would keep the old size.
+  # swaybg 1.0 (22.04) keeps drawing at the old size after a scale change, so
+  # it's restarted, but only once niri has applied the new one: it reloads a
+  # moment after the file changes, and a swaybg started before that draws at
+  # the old size again. Up to 5 s; with the screen off (lid shut) it never shows.
+  if [[ -n "$NIRI_SOCKET" ]]; then
+    local i
+    for (( i = 0; i < 50; i++ )); do
+      niri msg -j outputs 2>/dev/null \
+        | jq -e --arg c "$connector" --argjson s "$scale" '.[$c].logical.scale == $s' &>/dev/null && break
+      sleep 0.1
+    done
+  fi
   restart_swaybg
   log_ok "laptop screen scale → $scale, as in GNOME"
 }
