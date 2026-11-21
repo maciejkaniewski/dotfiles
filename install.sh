@@ -2834,6 +2834,7 @@ NIRI_LINKS=(
   "niri|$DOTFILES/.local/bin/waybar-calendar:$HOME/.local/bin/waybar-calendar"
   "niri|$DOTFILES/.local/bin/xclip:$HOME/.local/bin/xclip"
   "niri|$DOTFILES/.local/bin/osd:$HOME/.local/bin/osd"
+  "niri|$DOTFILES/.local/bin/column-width:$HOME/.local/bin/column-width"
   "niri|$DOTFILES/.local/bin/lock-screen:$HOME/.local/bin/lock-screen"
   "niri|$DOTFILES/.local/bin/waybar-launch:$HOME/.local/bin/waybar-launch"
   "niri|$DOTFILES/.local/bin/battery-notify:$HOME/.local/bin/battery-notify"

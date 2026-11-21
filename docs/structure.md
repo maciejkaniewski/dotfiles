@@ -95,6 +95,7 @@ dotfiles/
 │   └── bin/
 │       ├── git-credential-bw          # git credential helper — HTTPS logins from the Bitwarden vault
 │       ├── ports                      # list / watch USB serial ports, share one on the network
+│       ├── column-width               # niri: Super+= / Super+- step the column width, stopping at full and a quarter
 │       ├── battery-notify             # niri: low-battery warnings, power-saver at 20%
 │       ├── lock-screen                # niri: swaylock-effects, clock and second time zone over the wallpaper (PNG-cached)
 │       ├── osd                        # niri: volume / brightness keys, with a level pop-up

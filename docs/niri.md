@@ -86,12 +86,12 @@ Each of these leaves a stamp in `/usr/local/share/dotfiles/`, so `--setup` rebui
 | `Super+Alt+` arrow | Move the whole workspace to the monitor that way |
 | `Super+1`…`9`, `Super+U/I` | Go to a workspace, or the one below or above |
 | `Super+Ctrl+1`…`9` | Move the column to a workspace |
-| `Super+R` | Cycle the column width: a third, a half, two thirds |
+| `Super+R` | Cycle the column width: a quarter, a third, a half, two thirds, three quarters, full |
 | `Super+F` / `Super+Shift+F` | Maximise the column / fullscreen the window, which covers the bar too |
 | `Super+B` | Hide or show the bar; windows take the space |
 | `Super+Shift+B` | Make the focused screen the main one, with the full bar |
 | `Super+C` | Centre the column |
-| `Super+-` / `Super+=` | Narrow or widen the column by 10% |
+| `Super+-` / `Super+=` | Step the column width down or up through the same sizes, stopping at a quarter and at full width (`.local/bin/column-width`) |
 | `Super+[` / `Super+]` | Pull a window into the neighbouring column, or push it out into its own |
 | `Super+W` | Show the column as tabs |
 | `Super+V` | Float the window, or tile it again |
