@@ -2848,6 +2848,7 @@ NIRI_LINKS=(
   "niri|$DOTFILES/.local/bin/wifi-menu:$HOME/.local/bin/wifi-menu"
   "niri|$DOTFILES/.local/bin/bluetooth-menu:$HOME/.local/bin/bluetooth-menu"
   "niri|$DOTFILES/.config/autostart/nm-applet.desktop:$HOME/.config/autostart/nm-applet.desktop"
+  "niri|$DOTFILES/.config/autostart/snap-userd-autostart.desktop:$HOME/.config/autostart/snap-userd-autostart.desktop"
   "niri|$DOTFILES/.config/gtk-4.0/gtk.css:$HOME/.config/gtk-4.0/gtk.css"
 )
 # adw-gtk3 draws GTK 3 apps with libadwaita's named colours, so they take the

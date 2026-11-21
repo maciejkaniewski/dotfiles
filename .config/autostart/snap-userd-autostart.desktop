@@ -1,0 +1,12 @@
+# Snap's autostart helper, not run in niri: its only job here is starting
+# Ubuntu Software's background service, which is for GNOME and Unity only,
+# so in niri it starts nothing and then fails at every login. This shadows
+# /etc/xdg/autostart/snap-userd-autostart.desktop; GNOME still runs it.
+[Desktop Entry]
+Name=Snap user application autostart helper
+Comment=Helper program for launching snap applications that are configured to start automatically.
+Exec=/usr/bin/snap userd --autostart
+TryExec=/usr/bin/snap
+Type=Application
+NoDisplay=true
+NotShowIn=niri;
