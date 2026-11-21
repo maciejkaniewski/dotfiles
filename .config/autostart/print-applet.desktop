@@ -1,0 +1,11 @@
+# The print-queue tray icon, not run in niri, where it would sit in Waybar's
+# tray among the apps' icons. This shadows /etc/xdg/autostart/print-applet.desktop,
+# which GNOME and KDE skip already.
+[Desktop Entry]
+Type=Application
+Name=Print Queue Applet
+Exec=system-config-printer-applet
+TryExec=system-config-printer-applet
+X-GNOME-Autostart-Delay=30
+NoDisplay=true
+NotShowIn=KDE;GNOME;Cinnamon;LXDE;Unity;niri;

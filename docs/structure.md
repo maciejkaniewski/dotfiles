@@ -7,7 +7,7 @@ dotfiles/
 │   ├── nvim-checktime.sh              # PostToolUse hook — tells running nvim to reload files Claude wrote
 │   └── statusline-git.sh
 ├── .config/
-│   ├── autostart/                     # niri: nm-applet and Snap's autostart helper not started (GNOME still runs the helper)
+│   ├── autostart/                     # niri: GNOME autostarts it has no use for skipped (nm-applet, Snap's helper, calendar alarms, …); GNOME keeps its own
 │   ├── bat/
 │   │   └── config
 │   ├── btop/

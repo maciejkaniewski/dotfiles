@@ -1,0 +1,12 @@
+# Evolution's calendar alarms, not run in niri: they start Evolution's
+# calendar, contacts and online-accounts services at every login (about 200 MB
+# between them) for reminders from GNOME Calendar, which isn't used there.
+# This shadows /etc/xdg/autostart/org.gnome.Evolution-alarm-notify.desktop;
+# GNOME still runs it.
+[Desktop Entry]
+Type=Application
+Name=Evolution Alarm Notify
+Exec=/usr/libexec/evolution-data-server/evolution-alarm-notify
+TryExec=/usr/libexec/evolution-data-server/evolution-alarm-notify
+NoDisplay=true
+NotShowIn=niri;

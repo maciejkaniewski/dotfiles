@@ -1,0 +1,10 @@
+# Geoclue's demo location agent, not run in niri: nothing there asks for the
+# location (night-light uses fixed times). This shadows
+# /etc/xdg/autostart/geoclue-demo-agent.desktop, which GNOME skips already.
+[Desktop Entry]
+Type=Application
+Name=Geoclue Demo agent
+Exec=/usr/libexec/geoclue-2.0/demos/agent
+TryExec=/usr/libexec/geoclue-2.0/demos/agent
+NoDisplay=true
+NotShowIn=GNOME;niri;

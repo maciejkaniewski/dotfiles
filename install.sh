@@ -3036,6 +3036,10 @@ NIRI_LINKS=(
   "niri|$DOTFILES/.local/bin/bluetooth-menu:$HOME/.local/bin/bluetooth-menu"
   "niri|$DOTFILES/.config/autostart/nm-applet.desktop:$HOME/.config/autostart/nm-applet.desktop"
   "niri|$DOTFILES/.config/autostart/snap-userd-autostart.desktop:$HOME/.config/autostart/snap-userd-autostart.desktop"
+  "niri|$DOTFILES/.config/autostart/org.gnome.Evolution-alarm-notify.desktop:$HOME/.config/autostart/org.gnome.Evolution-alarm-notify.desktop"
+  "niri|$DOTFILES/.config/autostart/org.gnome.DejaDup.Monitor.desktop:$HOME/.config/autostart/org.gnome.DejaDup.Monitor.desktop"
+  "niri|$DOTFILES/.config/autostart/geoclue-demo-agent.desktop:$HOME/.config/autostart/geoclue-demo-agent.desktop"
+  "niri|$DOTFILES/.config/autostart/print-applet.desktop:$HOME/.config/autostart/print-applet.desktop"
   "niri|$DOTFILES/.config/gtk-4.0/gtk.css:$HOME/.config/gtk-4.0/gtk.css"
 )
 # adw-gtk3 draws GTK 3 apps with libadwaita's named colours, so they take the

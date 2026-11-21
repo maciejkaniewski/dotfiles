@@ -1,0 +1,11 @@
+# Déjà Dup's backup scheduler, not run in niri, where no backups are set up.
+# This shadows /etc/xdg/autostart/org.gnome.DejaDup.Monitor.desktop; GNOME
+# still runs it.
+[Desktop Entry]
+Type=Application
+Name=Backup Monitor
+Exec=/usr/libexec/deja-dup/deja-dup-monitor
+TryExec=/usr/libexec/deja-dup/deja-dup-monitor
+X-GNOME-Autostart-Delay=120
+NoDisplay=true
+NotShowIn=niri;
