@@ -3,3 +3,42 @@
 [flavor]
 dark  = "gruvbox-dark"
 light = "gruvbox-dark"
+
+# The Gruvbox flavor colours file names but not their icons, which then kept
+# yazi's own colours (bright blue folders). These are the Catppuccin flavors'
+# icons in Gruvbox's colours: folders blue, the well-known ones aqua.
+[icon]
+
+dirs = [
+	{ name = ".config", text = "", fg = "#d3869b" },
+	{ name = ".git", text = "", fg = "#8ec07c" },
+	{ name = ".github", text = "", fg = "#83a598" },
+	{ name = ".npm", text = "", fg = "#83a598" },
+	{ name = "Desktop", text = "", fg = "#8ec07c" },
+	{ name = "Development", text = "", fg = "#8ec07c" },
+	{ name = "Documents", text = "", fg = "#8ec07c" },
+	{ name = "Downloads", text = "", fg = "#8ec07c" },
+	{ name = "Library", text = "", fg = "#8ec07c" },
+	{ name = "Movies", text = "", fg = "#8ec07c" },
+	{ name = "Music", text = "", fg = "#8ec07c" },
+	{ name = "Pictures", text = "", fg = "#8ec07c" },
+	{ name = "Public", text = "", fg = "#8ec07c" },
+	{ name = "Videos", text = "", fg = "#8ec07c" },
+]
+conds = [
+	# Special files
+	{ if = "orphan", text = "", fg = "#ebdbb2" },
+	{ if = "link", text = "", fg = "#928374" },
+	{ if = "block", text = "", fg = "#fe8019" },
+	{ if = "char", text = "", fg = "#fe8019" },
+	{ if = "fifo", text = "", fg = "#fe8019" },
+	{ if = "sock", text = "", fg = "#fe8019" },
+	{ if = "sticky", text = "", fg = "#fe8019" },
+	{ if = "dummy", text = "", fg = "#fb4934" },
+
+	# Fallback
+	{ if = "dir & hovered", text = "", fg = "#83a598" },
+	{ if = "dir", text = "", fg = "#83a598" },
+	{ if = "exec", text = "", fg = "#b8bb26" },
+	{ if = "!dir", text = "", fg = "#ebdbb2" },
+]
