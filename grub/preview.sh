@@ -53,9 +53,9 @@ set theme=/boot/grub/themes/test/theme.txt
 export theme
 set timeout=30
 menuentry 'Ubuntu' --class ubuntu --class gnu-linux --class gnu --class os { true }
-submenu 'Advanced options for Ubuntu' { menuentry 'Ubuntu, with Linux' { true } }
+submenu 'Advanced options for Ubuntu' --class submenu { menuentry 'Ubuntu, with Linux' { true } }
 menuentry 'Windows Boot Manager (on /dev/nvme0n1p1)' --class windows --class os { true }
-menuentry 'UEFI Firmware Settings' { fwsetup }
+menuentry 'UEFI Firmware Settings' --class efi { fwsetup }
 EOF
   grub-mkrescue -o "$work/test.iso" "$work/iso" --modules="png gfxterm all_video" >/dev/null 2>&1
   cp /usr/share/OVMF/OVMF_VARS_4M.fd "$work/vars.fd"

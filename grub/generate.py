@@ -50,6 +50,11 @@ LABEL_TOP = 172           # "Booting in %d s", relative to 50%
 HINTS_FROM_BOTTOM = 100   # key hints image, relative to 100%
 BG_W, BG_H = 1920, 1200   # background, stretched to the screen
 HINTS = [("↑↓", "select"), ("enter", "boot"), ("e", "edit"), ("c", "console")]
+# Icons for entries that catppuccin/grub's set has none for, drawn from
+# FiraCode Nerd Font: GRUB picks an entry's icon by its --class, and install.sh
+# gives Ubuntu's "Advanced options" submenu and the UEFI entry these classes.
+GLYPH_ICONS = {"submenu": "\U000F024B",   # nf-md-folder
+               "efi": "\U000F0493"}       # nf-md-cog
 
 
 def rgba(h, a=255):
@@ -126,6 +131,14 @@ def hints(p):
         d.text(((x + kw + 8) * s, h / 2 * s), v, font=bigfont, fill=rgba(p["dim"]), anchor="lm")
         x += kw + 8 + vw + gap
     return big.resize((w, h), Image.LANCZOS)
+
+
+def glyph_icon(char, col, size=32):
+    s = 4
+    font = ImageFont.truetype(f"{FONTS}/FiraCodeNerdFont-Regular.ttf", 26 * s)
+    big = Image.new("RGBA", (size * s, size * s), (0, 0, 0, 0))
+    ImageDraw.Draw(big).text((size * s / 2, size * s / 2), char, font=font, fill=rgba(col), anchor="mm")
+    return big.resize((size, size), Image.LANCZOS)
 
 
 def recolour(src, col):
@@ -232,6 +245,8 @@ def generate(stub):
     for f in sorted(os.listdir(f"{GRUB}/icons")):
         if f.endswith(".png"):
             save(recolour(f"{GRUB}/icons/{f}", p["text"]), f"{out}/icons/{f}")
+    for cls, char in GLYPH_ICONS.items():
+        save(glyph_icon(char, p["text"]), f"{out}/icons/{cls}.png")
     name = {"gruvbox-dark": "Gruvbox Dark", "dracula": "Dracula"}.get(stub, f"Catppuccin {stub.capitalize()}")
     open(f"{out}/theme.txt", "w").write(THEME_TXT.format(
         name=name, half_w=PANEL_W // 2, panel_top=f"{PANEL_TOP:+d}", panel_w=PANEL_W, panel_h=PANEL_H,

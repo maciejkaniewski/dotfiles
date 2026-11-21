@@ -2682,6 +2682,41 @@ grub_gfx_modes() {
   } 2>/dev/null | grep -xE '[0-9]+x[0-9]+' | awk -Fx '$2 <= 1600 && !seen[$0]++' | paste -sd, - | sed 's/$/,auto/'
 }
 
+# GRUB picks an entry's icon by its --class, and Ubuntu's scripts give the
+# "Advanced options" submenu and the UEFI entry none, so the theme's folder and
+# gear icons (classes submenu and efi) would never show. One word each in
+# grub-common's 10_linux and 30_uefi-firmware. They are package conffiles: a
+# grub-common update that changes them makes apt ask which version to keep;
+# taking Ubuntu's drops the word, and the next --setup puts it back. A line
+# that no longer reads as expected is left alone. Prints the files it changed,
+# "!path" for one it couldn't.
+grub_entry_classes() {
+  sudo python3 - <<'EOF'
+edits = [
+    ("/etc/grub.d/10_linux",
+     "| grub_quote)' \\$menuentry_id_option 'gnulinux-advanced-",
+     "| grub_quote)' --class submenu \\$menuentry_id_option 'gnulinux-advanced-"),
+    ("/etc/grub.d/30_uefi-firmware",
+     "menuentry '$LABEL' \\$menuentry_id_option 'uefi-firmware'",
+     "menuentry '$LABEL' --class efi \\$menuentry_id_option 'uefi-firmware'"),
+]
+out = []
+for path, old, new in edits:
+    try:
+        s = open(path).read()
+    except FileNotFoundError:
+        continue
+    if new in s:
+        continue
+    if s.count(old) != 1:
+        out.append("!" + path)
+        continue
+    open(path, "w").write(s.replace(old, new))
+    out.append(path)
+print(" ".join(out))
+EOF
+}
+
 install_grub_theme() {
   grub_in_use || { log_skip "GRUB theme (GRUB isn't the bootloader here)"; return; }
   # Before a theme is picked, Mocha (configure_theme's fallback); picking one
@@ -2716,6 +2751,19 @@ install_grub_theme() {
       echo "GRUB_GFXMODE=\"$modes\"" | sudo tee -a /etc/default/grub >/dev/null
     fi
     log_ok "GRUB_GFXMODE → $modes"; changed=true
+  fi
+  local f edited
+  edited=$(grub_entry_classes)
+  if [[ -z "$edited" ]]; then
+    log_skip "menu icons for Advanced options and UEFI settings"
+  else
+    for f in $edited; do
+      if [[ "$f" == !* ]]; then
+        log_warn "${f#!} no longer reads as expected — left alone, so its entry has no icon"
+      else
+        log_ok "${f##*/}: entry gets its icon (--class)"; changed=true
+      fi
+    done
   fi
   [[ "$changed" == true ]] || return 0
   run_spin "updating GRUB's config..." sudo update-grub \
@@ -4227,7 +4275,10 @@ verify_grub_theme() {
   local fonts="FiraCode"
   grep -qE "^[[:space:]]*loadfont .*grub/themes/dotfiles/fira-20\.pf2" /boot/grub/grub.cfg 2>/dev/null \
     || fonts="GRUB's Unifont (FiraCode missing: install fonts, then --setup)"
-  echo "boot menu in $stub, $fonts"
+  if grep -q "^submenu 'Advanced options" /boot/grub/grub.cfg && ! grep -q "^submenu 'Advanced options.*--class submenu" /boot/grub/grub.cfg; then
+    echo "the Advanced options entry has no icon class (run --setup)"; return 1
+  fi
+  echo "boot menu in $stub, $fonts, icons on every entry"
 }
 
 verify_dpkg_state() {
