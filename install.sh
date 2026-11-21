@@ -2926,6 +2926,51 @@ EOF
   log_ok ".config/niri/local.kdl (keyboard layout ${layout:-us}${variant:+ $variant})"
 }
 
+# The laptop's own screen at the scale GNOME uses for it, from GNOME's saved
+# layouts (~/.config/monitors.xml). Left to itself niri picks one by pixel
+# density: 125% on a 14" 1920x1200 panel that GNOME shows at 100%. Added to
+# local.kdl once, so a scale set there by hand stays; without a GNOME layout
+# niri's own pick stands.
+niri_laptop_scale() {
+  local local_kdl="$HOME/.config/niri/local.kdl" found connector scale
+  [[ -f "$local_kdl" ]] || return 0
+  if grep -q '^output "eDP' "$local_kdl"; then
+    log_skip "laptop screen scale (set in local.kdl)"; return
+  fi
+  found=$(python3 - "$HOME/.config/monitors.xml" 2>/dev/null <<'EOF'
+import collections, sys, xml.etree.ElementTree as ET
+seen = collections.Counter()
+for lm in ET.parse(sys.argv[1]).getroot().iter("logicalmonitor"):
+    for c in lm.iterfind("monitor/monitorspec/connector"):
+        if c.text.startswith("eDP"):
+            seen[(c.text, lm.findtext("scale", "1"))] += 1
+if seen:
+    print(*seen.most_common(1)[0][0])
+EOF
+  )
+  [[ -n "$found" ]] || { log_skip "laptop screen scale (no GNOME layout, niri picks)"; return; }
+  connector=${found% *} scale=${found#* }
+  cat >> "$local_kdl" <<EOF
+
+// The laptop's own screen at the scale GNOME uses for it (copied from
+// ~/.config/monitors.xml); left to itself niri picks one by pixel density.
+output "$connector" {
+    scale $scale
+}
+EOF
+  # niri applies it at once; swaybg 1.0 (22.04) would keep the old size.
+  restart_swaybg
+  log_ok "laptop screen scale → $scale, as in GNOME"
+}
+
+# swaybg restarted through niri, so it stays in the session rather than tied to
+# this terminal: on a new wallpaper, or a new scale it wouldn't redraw for.
+restart_swaybg() {
+  [[ -n "$NIRI_SOCKET" ]] && pgrep -x swaybg >/dev/null || return 0
+  pkill -x swaybg
+  niri msg action spawn-sh -- 'exec swaybg -m fill -i ~/.config/niri/wallpaper' &>/dev/null
+}
+
 # VS Code picks its secret store by recognising the desktop, and doesn't know
 # niri: it then offers "weaker encryption", which would stick in GNOME too.
 # Naming the store outright means the same gnome-keyring in both sessions.
@@ -3061,6 +3106,7 @@ install_niri_desktop() {
   # linked above (nm-applet's, turning it off) waits for a reboot.
   systemctl --user daemon-reload 2>/dev/null
   write_niri_local
+  niri_laptop_scale
   fetch_wallpapers
   ensure_login_path
   vscode_use_keyring
@@ -3315,10 +3361,7 @@ apply_theme() {
   pkill -USR1 -x kitty 2>/dev/null
   pkill -USR2 -x waybar 2>/dev/null
   command_exists makoctl && makoctl reload &>/dev/null
-  if [[ -n "$NIRI_SOCKET" ]] && pgrep -x swaybg >/dev/null; then
-    pkill -x swaybg
-    niri msg action spawn-sh -- 'exec swaybg -m fill -i ~/.config/niri/wallpaper' &>/dev/null
-  fi
+  restart_swaybg
   # The lock screen's PNG of the new wallpaper (.local/bin/lock-screen).
   [[ -n "$NIRI_SOCKET" ]] && command_exists lock-screen && { lock-screen --prepare &>/dev/null & }
   return 0
