@@ -2573,6 +2573,44 @@ install_zram() {
     || log_error "sysctl" "could not apply 99-zram.conf"; }
 }
 
+# ── Logs and firewall ────────────────────────────────────────────────────────────
+JOURNAL_CAP=etc/systemd/journald.conf.d/50-max-size.conf
+
+install_journal_cap() {
+  install_root_file "$JOURNAL_CAP" 644
+  [[ $? == 0 ]] || return 0
+  sudo systemctl restart systemd-journald \
+    && log_ok "journal capped at 500M ($(journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[KMG]' | head -1) now)" \
+    || log_error "journald" "restart failed — the cap applies from the next boot"
+}
+
+# ufw on, incoming blocked, outgoing allowed — Ubuntu ships it off. Only when
+# it is off: a firewall someone has already set up is left exactly as it is.
+# SSH stays reachable where an SSH server is installed, and `ports firewall`
+# opens whatever ports share already serves (share/unshare keep it in step).
+install_firewall() {
+  if ! pkg_installed ufw; then
+    run_spin "installing ufw..." apt_get install -y ufw || { log_error "ufw" "apt install failed"; return; }
+  fi
+  if grep -qx 'ENABLED=yes' /etc/ufw/ufw.conf 2>/dev/null; then
+    log_skip "firewall (ufw on; its rules are left as they are)"
+  else
+    local ssh=""
+    pkg_installed openssh-server && { sudo ufw allow OpenSSH >/dev/null; ssh=", SSH allowed"; }
+    sudo ufw default deny incoming >/dev/null && sudo ufw default allow outgoing >/dev/null \
+      && sudo ufw --force enable >/dev/null \
+      && log_ok "firewall on: incoming blocked, outgoing allowed${ssh}" \
+      || { log_error "ufw" "could not enable — run manually: sudo ufw enable"; return; }
+    # Listeners the firewall now hides from the network, so a missing one is
+    # no surprise. ser2net is left out: its ports are opened just below.
+    local blocked
+    blocked=$(sudo ss -tlnpH 2>/dev/null | awk '$4 !~ /^(127\.|\[::1\])/' \
+      | grep -oP 'users:\(\("\K[^"]+' | grep -vx -e ser2net -e sshd | sort -u | paste -sd, -)
+    [[ -n "$blocked" ]] && log_warn "now unreachable from the network: $blocked (sudo ufw allow PORT to open one)"
+  fi
+  "$DOTFILES/.local/bin/ports" firewall
+}
+
 # ── niri desktop ───────────────────────────────────────────────────────────────
 # niri (a scrollable-tiling Wayland compositor) as a second session on the login
 # screen, beside GNOME. Opt-in: --setup asks, or --niri adds it on its own;
@@ -4048,6 +4086,12 @@ verify_zram() {
   echo "$size zram swap, swappiness 150"
 }
 
+verify_logs_firewall() {
+  cmp -s "$DOTFILES/$JOURNAL_CAP" "/$JOURNAL_CAP" || { echo "/$JOURNAL_CAP missing or out of date (run --setup)"; return 1; }
+  grep -qx 'ENABLED=yes' /etc/ufw/ufw.conf 2>/dev/null || { echo 'ufw is off (run --setup, or: sudo ufw enable)'; return 1; }
+  echo "journal capped at 500M; ufw on, incoming blocked by default"
+}
+
 verify_dpkg_state() {
   local out; out=$(dpkg -C 2>&1)
   [[ -z "$out" ]] || { echo 'dpkg reports half-configured or broken packages'; return 1; }
@@ -4078,6 +4122,7 @@ verify_install() {
   vcheck "ser2net"           verify_ser2net
   epp_rule_wanted && vcheck "CPU power rule" verify_amd_epp
   pkg_installed zram-tools && vcheck "zram swap" verify_zram
+  vcheck "logs + firewall"   verify_logs_firewall
   [[ -x "$NIRI_BIN" ]] && vcheck "niri desktop" verify_niri
   vcheck "shell lint"        verify_shell_lint
   vcheck "dpkg state"        verify_dpkg_state
@@ -4175,6 +4220,10 @@ cmd_setup() {
   section "Power and memory"
   install_amd_epp
   install_zram
+
+  section "Logs and firewall"
+  install_journal_cap
+  install_firewall
 
   # Opt-in: the question above, or --niri on its own later.
   section "niri desktop"
@@ -4533,6 +4582,9 @@ usage() {
   echo -e "    ${TEXT}${BOLD}Power and memory${RESET}"
   echo -e "      ${SUBTEXT}CPU power rule       ${TEXT}AMD laptops with an old power-profiles-daemon: CPU EPP follows the power profile; in Balanced, the charger${RESET}"
   echo -e "      ${SUBTEXT}zram swap            ${TEXT}compressed swap in RAM, half its size, zstd (zram-tools), swappiness 150${RESET}"
+  echo -e "    ${TEXT}${BOLD}Logs and firewall${RESET}"
+  echo -e "      ${SUBTEXT}journal cap          ${TEXT}system logs kept to 500M (journald's default allows up to 4G)${RESET}"
+  echo -e "      ${SUBTEXT}ufw                  ${TEXT}firewall on when off: incoming blocked, SSH allowed if a server is installed; ports share opens its ports${RESET}"
   echo -e "    ${TEXT}${BOLD}Configuration${RESET}"
   echo -e "      ${SUBTEXT}Dotfile symlinks${RESET}"
   echo -e "      ${SUBTEXT}Theme                ${TEXT}pick Catppuccin (frappe/macchiato/mocha), Gruvbox Dark, or Dracula — kitty + bat + nvim + fzf + eza + tab bar + btop + zsh-syntax-highlighting + lazygit + delta + Powerlevel10k + yazi, and the niri session's bar, launcher, notifications and lock screen${RESET}"

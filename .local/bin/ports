@@ -33,6 +33,7 @@ Usage: ports                         list USB serial ports, and those shared on 
        ports share DEVICE [PORT]     share DEVICE on TCP PORT too, now and at boot, or move it to PORT
        ports unshare DEVICE|PORT     stop sharing that one; the others stay shared
        ports unshare [--all]         stop sharing all of them (bare: only when one is shared)
+       ports firewall                open exactly the shared ports in ufw (share and unshare do it too)
 
 ttyUSB1 means /dev/ttyUSB1; an alias or a /dev/serial/by-id path works too.
 PORT defaults to the one DEVICE is already shared on, else the first free
@@ -348,6 +349,27 @@ reload_ser2net() {
   sleep 0.5
 }
 
+# With ufw on (install.sh --setup turns it on: incoming blocked), a shared
+# port needs its own allow rule. Keeps the rules commented "ports share" to
+# exactly the ports shared now: opens new ones, closes ones no longer shared.
+# Rules added by hand, without that comment, are left alone.
+sync_firewall() {
+  command -v ufw >/dev/null && grep -qx 'ENABLED=yes' /etc/ufw/ufw.conf 2>/dev/null || return 0
+  local p port
+  local -a want=() have=()
+  while read -r port _; do want+=("$port"); done < <(shared)
+  mapfile -t have < <(sudo ufw show added 2>/dev/null \
+    | sed -n "s|^ufw allow \([0-9]*\)/tcp comment 'ports share'$|\1|p")
+  for p in "${have[@]}"; do
+    [[ " ${want[*]} " == *" $p "* ]] || sudo ufw delete allow "$p/tcp" >/dev/null \
+      || echo "${RED}✗${RESET} could not close port $p in the firewall (ufw)" >&2
+  done
+  for p in "${want[@]}"; do
+    [[ " ${have[*]} " == *" $p "* ]] || sudo ufw allow "$p/tcp" comment 'ports share' >/dev/null \
+      || echo "${RED}✗${RESET} could not open port $p in the firewall (ufw) — clients can't connect" >&2
+  done
+}
+
 # Shares exactly the "PORT DEVICE" arguments: none stops ser2net, now and at
 # boot. While it runs, a connection that goes away is first disabled, which
 # kicks its client off and frees the adapter and the TCP port; deleted
@@ -359,6 +381,7 @@ apply_shares() {
   if (( $# == 0 )); then
     write_config
     sudo systemctl disable --quiet --now ser2net || share_die "could not stop ser2net"
+    sync_firewall
     return
   fi
 
@@ -381,6 +404,7 @@ apply_shares() {
       || share_die "ser2net did not start — see: journalctl -u ser2net -n 20"
     sleep 0.5
   fi
+  sync_firewall
 }
 
 # Shares $1 on TCP port $2 as well as whatever is shared already, or moves it
@@ -659,6 +683,7 @@ case $1 in
   --waybar)   waybar_ports ;;
   share)      share "$2" "$3" ;;
   unshare)    unshare "$2" ;;
+  firewall)   sync_firewall ;;
   -h|--help)  usage ;;
   *)          usage >&2; exit 2 ;;
 esac

@@ -119,6 +119,8 @@ dotfiles/
 │   ├── sysctl.d/
 │   │   └── 99-zram.conf               # copied to /etc by --setup: swappiness for zram swap
 │   ├── systemd/
+│   │   ├── journald.conf.d/
+│   │   │   └── 50-max-size.conf       # copied to /etc by --setup: system logs kept to 500M
 │   │   └── system/
 │   │       ├── epp-follow-profile.service  # copied to /etc by --setup with 99-amd-epp.rules: re-applies EPP on a profile change
 │   │       └── ser2net.service        # copied to /etc by --setup / --ser2net: the source-built ser2net, for ports share

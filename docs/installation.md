@@ -136,6 +136,13 @@ At the end of `--setup` you are asked for your git name and email, which go into
 | CPU power rule | AMD laptops only, and only while power-profiles-daemon is too old to drive `amd-pstate` (0.10 on Ubuntu 22.04). That daemon's profiles never touch the CPU's energy/performance preference (EPP), which the kernel leaves at `performance`, on battery too. `/usr/local/sbin/set-epp` sets EPP from the power profile: Performance → `performance` and Power saver → `power`, on the charger or not; in Balanced the charger decides, `balance_performance` on it and `balance_power` on battery. It runs when the charger is plugged in or out (`99-amd-epp.rules`), when the profile changes from the panel, Waybar or `powerprofilesctl` (`epp-follow-profile.service`, which watches the daemon over D-Bus), and after resume (a `system-sleep` hook). Where the daemon handles `amd-pstate` (0.20+, Ubuntu 24.04 on) it is skipped, and removed if an older setup left it behind |
 | zram swap | `zram-tools` with compressed swap in RAM: half its size, zstd, priority 100. `99-zram.conf` sets `vm.swappiness=150` and `vm.page-cluster=0`, tuned for swap that lives in RAM. Skipped where zram is already set up another way (`systemd-zram-generator`) |
 
+**Logs and firewall**
+
+| What | Description |
+|---|---|
+| journal cap | `50-max-size.conf` in `/etc/systemd/journald.conf.d` keeps the system logs to 500M; journald's default allows 10% of the disk, up to 4G |
+| ufw | Ubuntu ships the firewall off. When it is off, `--setup` turns it on with incoming connections blocked and outgoing allowed, keeps SSH reachable where an SSH server is installed, and names any listener the firewall now hides. A firewall already on is left as it is. `ports share` opens its TCP ports itself — see [Serial ports](serial-ports.md) |
+
 ## Machine-local files
 
 These files are **not** tracked in dotfiles — they are machine-specific and generated during setup:

@@ -39,6 +39,7 @@ Watching for plug and unplug — Ctrl-C to stop
 | `ports share DEVICE [PORT]` | Shares DEVICE on the network on TCP PORT as well as whatever is shared already, now and at boot, or moves it to PORT (below) |
 | `ports unshare DEVICE\|PORT` | Stops sharing that one; the others stay shared and connected |
 | `ports unshare [--all]` | Stops sharing all of them, now and at boot. Bare, only when one is shared; with several it lists them and asks which |
+| `ports firewall` | Opens exactly the shared ports in ufw and closes any it opened before that are no longer shared. `share` and `unshare` do this themselves; `--setup` runs it once after turning the firewall on |
 
 Colours follow the theme picked with `--theme`, in the same roles as the prompt; the latency shows green at 1 ms and orange at anything else. Piped output is plain text.
 
@@ -68,5 +69,6 @@ DEVICE        PRODUCT            SERIAL    DRIVER    LATENCY  PORT  SHARED  STAB
 - **Adding or removing one share leaves the others connected.** A change reloads ser2net (SIGHUP) instead of restarting it. A share being removed is disabled first, which kicks its client off at once; deleted outright, ser2net would keep it until the client disconnected.
 - **Ethernet, not Wi-Fi.** Over Wi-Fi a remote bench sees timeouts; over a cable it needs no extra latency flags. The address list puts Ethernet first.
 - **No password.** Anyone on the network can open the port while it is shared, which is why the last `unshare` disables it at boot as well.
+- **The firewall follows the shares.** `--setup` turns ufw on with incoming connections blocked, so with ufw on `share` adds an allow rule for its TCP port (commented `ports share`) and `unshare` removes it. Rules added by hand are left alone. With ufw off, nothing changes.
 - **This machine can still use the adapter** while nobody is connected; ser2net opens it only for a client. Or connect through the share like everyone else: `rfc2217://localhost:4000`.
 - **A stable path survives replugging.** `ports share /dev/serial/by-id/…` keeps sharing the same adapter whichever `ttyUSB` number it gets next time.
