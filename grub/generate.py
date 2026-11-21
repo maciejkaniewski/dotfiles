@@ -2,15 +2,21 @@
 """Generates the GRUB boot-menu themes in grub/themes, one per dotfiles theme.
 
 Each is the same layout in that theme's colours: the niri wallpaper's glows
-behind a rounded, translucent panel holding the menu, a countdown bar, and
-the keys to press underneath. Colours come from the repo's own theme files
+behind a rounded panel holding the menu, a countdown bar, and the keys to
+press underneath, all in Terminus. Colours come from the repo's own theme files
 (kitty for base/text/surface/grey, gtk-3.0 for the accent, the niri wallpaper
 SVG for the glows), so the boot menu matches the desktop it starts.
 
 A maintainer tool: run it after changing a palette or the layout, and commit
-what it writes. It needs Python with Pillow, and the FiraCode Nerd Font that
-install.sh puts in ~/.local/share/fonts for the key hints. install.sh itself
-never runs it; it only copies the result into /boot/grub/themes/dotfiles.
+what it writes. It needs Python with Pillow, Terminus (fonts-terminus-otb)
+for the key hints and FiraCode Nerd Font (install.sh puts it in
+~/.local/share/fonts) for two icons. install.sh itself never runs it; it only
+copies the result into /boot/grub/themes/dotfiles.
+
+The menu is in Terminus, a bitmap font: GRUB draws fonts as 1-bit bitmaps,
+which leaves an outline font like FiraCode ragged on a real screen, while
+Terminus is drawn pixel by pixel and stays sharp. install.sh converts it with
+grub-mkfont; GRUB knows the results as "Terminus Regular 20" and "... 16".
 
     python3 grub/generate.py            # all themes
     python3 grub/generate.py --preview  # also quick mock-ups at 1920x1200,
@@ -33,6 +39,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 GRUB = os.path.dirname(os.path.abspath(__file__))
 DOT = os.path.dirname(GRUB)
 FONTS = os.path.expanduser("~/.local/share/fonts")
+TERMINUS = "/usr/share/fonts/opentype/terminus/terminus-bold.otb"
 STUBS = ["frappe", "macchiato", "mocha", "gruvbox-dark", "dracula"]
 
 # Layout, in GRUB's pixels. The panel is the boot_menu component; GRUB draws
@@ -115,7 +122,10 @@ def nine_slice(img, r, prefix, out):
 
 
 def hints(p):
-    font = ImageFont.truetype(f"{FONTS}/FiraCodeNerdFont-Regular.ttf", 16)
+    """The key hints, in Terminus 16 like the countdown above them. Its text is
+    drawn at its own size (a bitmap font has no other), the keycap outlines
+    4x and scaled down for smooth corners."""
+    font = ImageFont.truetype(TERMINUS, 16)
     probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     cells = [(k, v, probe.textlength(k, font=font) + 20, probe.textlength(v, font=font)) for k, v in HINTS]
     gap, h = 36, 32
@@ -123,14 +133,18 @@ def hints(p):
     s = 4
     big = Image.new("RGBA", (w * s, h * s), (0, 0, 0, 0))
     d = ImageDraw.Draw(big)
-    bigfont = ImageFont.truetype(f"{FONTS}/FiraCodeNerdFont-Regular.ttf", 16 * s)
     x = 2
     for k, v, kw, vw in cells:
         d.rounded_rectangle([x * s, 1 * s, (x + kw) * s, (h - 1) * s], radius=7 * s, outline=rgba(p["dim"]), width=2 * s)
-        d.text(((x + kw / 2) * s, h / 2 * s), k, font=bigfont, fill=rgba(p["text"]), anchor="mm")
-        d.text(((x + kw + 8) * s, h / 2 * s), v, font=bigfont, fill=rgba(p["dim"]), anchor="lm")
         x += kw + 8 + vw + gap
-    return big.resize((w, h), Image.LANCZOS)
+    img = big.resize((w, h), Image.LANCZOS)
+    d = ImageDraw.Draw(img)
+    x = 2
+    for k, v, kw, vw in cells:
+        d.text((round(x + kw / 2), h // 2), k, font=font, fill=rgba(p["text"]), anchor="mm")
+        d.text((round(x + kw + 8), h // 2), v, font=font, fill=rgba(p["dim"]), anchor="lm")
+        x += kw + 8 + vw + gap
+    return img
 
 
 def glyph_icon(char, col, size=32):
@@ -161,8 +175,16 @@ title-text: ""
 desktop-image: "background.png"
 desktop-image-scale-method: "stretch"
 desktop-color: "{base}"
+# GRUB's text console — shown while it loads Linux after a pick, and for the
+# "c" console — covers the whole screen with no frame, over the background.
+# Framed, it showed as a large empty panel during every boot (quiet boot
+# prints nothing into it).
 terminal-font: "Unifont Regular 16"
-terminal-box: "menu_*.png"
+terminal-left: "0"
+terminal-top: "0"
+terminal-width: "100%"
+terminal-height: "100%"
+terminal-border: "0"
 
 + boot_menu {{
   left = 50%-{half_w}
@@ -170,8 +192,8 @@ terminal-box: "menu_*.png"
   width = {panel_w}
   height = {panel_h}
   menu_pixmap_style = "menu_*.png"
-  item_font = "FiraCode Nerd Font Regular 20"
-  selected_item_font = "FiraCode Nerd Font Regular 20"
+  item_font = "Terminus Regular 20"
+  selected_item_font = "Terminus Regular 20"
   item_color = "{text}"
   selected_item_color = "{text}"
   selected_item_pixmap_style = "select_*.png"
@@ -204,7 +226,7 @@ terminal-box: "menu_*.png"
   width = {panel_w}
   align = "center"
   text = "Booting in %d s"
-  font = "FiraCode Nerd Font Regular 16"
+  font = "Terminus Regular 16"
   color = "{dim}"
 }}
 
@@ -222,7 +244,10 @@ def generate(stub):
     shutil.rmtree(out, ignore_errors=True)
     os.makedirs(f"{out}/icons")
     save(background(stub).convert("RGB"), f"{out}/background.png")
-    panel = rounded(2 * RADIUS + 1, 2 * RADIUS + 1, RADIUS, rgba(p["base"], 205), rgba(p["surf"]), 2)
+    # Opaque: on real firmware GRUB blends a translucent panel pixel by pixel on
+    # every key press, which lagged and flashed black on a ThinkPad (QEMU's
+    # virtual display hides it). Only the rounded corners keep their alpha.
+    panel = rounded(2 * RADIUS + 1, 2 * RADIUS + 1, RADIUS, rgba(p["base"]), rgba(p["surf"]), 2)
     nine_slice(panel, RADIUS, "menu", out)
     sel = rounded(2 * 10 + 1, ITEM_H, 10, rgba(p["surf"]))
     save(sel.crop((0, 0, 10, ITEM_H)), f"{out}/select_w.png")
@@ -275,8 +300,8 @@ def preview(stub, p, W, H, path):
     box.paste(part("c").resize((PANEL_W - 2 * r, PANEL_H - 2 * r)), (r, r))
     img.alpha_composite(box, (px, py))
     d = ImageDraw.Draw(img)
-    font = ImageFont.truetype(f"{FONTS}/FiraCodeNerdFont-Regular.ttf", 20)
-    small = ImageFont.truetype(f"{FONTS}/FiraCodeNerdFont-Regular.ttf", 16)
+    font = ImageFont.truetype(TERMINUS, 20)
+    small = ImageFont.truetype(TERMINUS, 16)
     cx, cw = px + r, PANEL_W - 2 * r
     sw, sc, se = (Image.open(f"{t}/select_{s}.png") for s in "wce")
     for i, (label, cls) in enumerate(ENTRIES):

@@ -10,7 +10,7 @@
 #
 # Defaults: the current theme, at 1920x1200. A mode the virtual firmware
 # doesn't offer falls back to 800x600, as it would on a real screen.
-# Needs: qemu-system-x86 ovmf xorriso mtools (apt), grub-mkrescue (grub-common).
+# Needs: qemu-system-x86 ovmf xorriso mtools fonts-terminus-otb (apt), grub-mkrescue (grub-common).
 set -euo pipefail
 GRUB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 stub=${1:-}
@@ -35,8 +35,8 @@ t="$work/iso/boot/grub/themes/test"
 cp -r "$theme" "$t"
 cp /usr/share/grub/unicode.pf2 "$t/font.pf2"
 for sz in 16 20; do   # the same fonts install.sh makes
-  grub-mkfont -s "$sz" -r 0x20-0x7E -r 0xA0-0x17F -r 0x2190-0x2193 -o "$t/fira-$sz.pf2" \
-    "$HOME/.local/share/fonts/FiraCodeNerdFont-Regular.ttf"
+  grub-mkfont -s "$sz" -r 0x20-0x7E -r 0xA0-0x17F -r 0x2190-0x2193 -o "$t/terminus-$sz.pf2" \
+    /usr/share/fonts/opentype/terminus/terminus-bold.otb
 done
 
 for m in "${modes[@]}"; do
@@ -47,8 +47,8 @@ insmod png
 set gfxmode=$m,auto
 terminal_output gfxterm
 loadfont /boot/grub/themes/test/font.pf2
-loadfont /boot/grub/themes/test/fira-16.pf2
-loadfont /boot/grub/themes/test/fira-20.pf2
+loadfont /boot/grub/themes/test/terminus-16.pf2
+loadfont /boot/grub/themes/test/terminus-20.pf2
 set theme=/boot/grub/themes/test/theme.txt
 export theme
 set timeout=30

@@ -2613,17 +2613,18 @@ install_firewall() {
 
 # ── GRUB boot menu ───────────────────────────────────────────────────────────────
 # The boot menu in the theme's colours: the niri wallpaper's glows behind a
-# translucent panel holding the menu, a countdown bar, and the keys to press.
+# panel holding the menu, a countdown bar, and the keys to press.
 # grub/themes holds one GRUB theme per stub, written by grub/generate.py from
 # the repo's own theme files (and checked in real GRUB with grub/preview.sh).
 # GRUB_THEME points at one fixed folder under /boot — which GRUB can read even
 # when the root file system is encrypted — and switching themes replaces what
-# is in it, so it needs no update-grub. Fonts aren't kept in the repo: FiraCode
-# is converted from the copy install_fonts installs, and the console keeps the
-# Unifont GRUB ships.
+# is in it, so it needs no update-grub. Fonts aren't kept in the repo: the menu
+# is in Terminus, converted from fonts-terminus-otb — a bitmap font, so it stays
+# sharp where GRUB's 1-bit rendering left FiraCode ragged — and the console
+# keeps the Unifont GRUB ships.
 GRUB_THEME_DIR=/boot/grub/themes/dotfiles
 GRUB_THEME_LINE="GRUB_THEME=\"$GRUB_THEME_DIR/theme.txt\""
-GRUB_FONT_TTF="$HOME/.local/share/fonts/FiraCodeNerdFont-Regular.ttf"
+GRUB_FONT=/usr/share/fonts/opentype/terminus/terminus-bold.otb
 
 grub_in_use() { [[ -f /etc/default/grub && -d /boot/grub ]] && command_exists update-grub; }
 grub_theme_managed() { grep -qxF "$GRUB_THEME_LINE" /etc/default/grub 2>/dev/null; }
@@ -2646,15 +2647,16 @@ theme_stub() {
 grub_theme_activate() {
   local src="$DOTFILES/grub/themes/$1" new="$GRUB_THEME_DIR.new" old="$GRUB_THEME_DIR.old" sz
   [[ -f "$src/theme.txt" ]] || return 2
-  diff -rq -x '*.pf2' "$src" "$GRUB_THEME_DIR" &>/dev/null && return 1
+  diff -rq -x '*.pf2' "$src" "$GRUB_THEME_DIR" &>/dev/null \
+    && { [[ ! -f "$GRUB_FONT" || -f "$GRUB_THEME_DIR/terminus-20.pf2" ]]; } && return 1
   sudo mkdir -p "${GRUB_THEME_DIR%/*}" && sudo rm -rf "$new" "$old" && sudo cp -r "$src" "$new" || return 2
   [[ -f /usr/share/grub/unicode.pf2 ]] && sudo cp /usr/share/grub/unicode.pf2 "$new/font.pf2"
-  # The menu's FiraCode at its two sizes, ASCII, Latin-1/Extended-A and arrows.
+  # The menu's Terminus at its two sizes, ASCII, Latin-1/Extended-A and arrows.
   # update-grub loads every .pf2 here; without them GRUB falls back to Unifont.
-  if [[ -f "$GRUB_FONT_TTF" ]] && command_exists grub-mkfont; then
+  if [[ -f "$GRUB_FONT" ]] && command_exists grub-mkfont; then
     for sz in 16 20; do
       sudo grub-mkfont -s "$sz" -r 0x20-0x7E -r 0xA0-0x17F -r 0x2190-0x2193 \
-        -o "$new/fira-$sz.pf2" "$GRUB_FONT_TTF" || return 2
+        -o "$new/terminus-$sz.pf2" "$GRUB_FONT" || return 2
     done
   fi
   { [[ ! -e "$GRUB_THEME_DIR" ]] || sudo mv "$GRUB_THEME_DIR" "$old"; } \
@@ -2719,6 +2721,11 @@ EOF
 
 install_grub_theme() {
   grub_in_use || { log_skip "GRUB theme (GRUB isn't the bootloader here)"; return; }
+  if ! pkg_installed fonts-terminus-otb; then
+    run_spin "installing fonts-terminus-otb (the boot menu's font)..." apt_get install -y fonts-terminus-otb \
+      && log_ok "fonts-terminus-otb — Terminus, the boot menu's bitmap font" \
+      || log_warn "fonts-terminus-otb didn't install — the boot menu falls back to GRUB's Unifont"
+  fi
   # Before a theme is picked, Mocha (configure_theme's fallback); picking one
   # later switches it.
   local stub; stub=$(theme_stub); stub=${stub:-mocha}
@@ -2731,6 +2738,11 @@ install_grub_theme() {
 
   local modes changed=false
   modes=$(grub_gfx_modes)
+  # grub.cfg names each font file it loads, so new fonts need it regenerated.
+  if [[ -f "$GRUB_THEME_DIR/terminus-20.pf2" ]] \
+    && ! grep -q "loadfont .*themes/dotfiles/terminus-20.pf2" /boot/grub/grub.cfg 2>/dev/null; then
+    changed=true
+  fi
   [[ -e /etc/default/grub.dotfiles-bak ]] || sudo cp /etc/default/grub /etc/default/grub.dotfiles-bak
   if grub_theme_managed; then
     log_skip "GRUB_THEME → $GRUB_THEME_DIR"
@@ -3463,6 +3475,20 @@ install_niri_desktop() {
   launcher_icons
   snap_theme_installs_off
   mako_apparmor_allow
+  mako_unit_off
+}
+
+# The niri config starts mako itself (spawn-at-startup), but mako-notifier also
+# enables mako.service for every user's graphical session, so a second copy
+# started at each login, found the notification name taken and failed. Masked
+# for this user only: GNOME, which shows its own notifications, never needs it.
+mako_unit_off() {
+  [[ "$(systemctl --user is-enabled mako.service 2>/dev/null)" == masked ]] \
+    && { log_skip "mako.service (masked; niri starts mako)"; return; }
+  systemctl --user mask mako.service &>/dev/null && systemctl --user reset-failed mako.service &>/dev/null
+  [[ "$(systemctl --user is-enabled mako.service 2>/dev/null)" == masked ]] \
+    && log_ok "mako.service masked (niri starts mako; it was a failing second copy)" \
+    || log_error "mako" "could not mask mako.service — run: systemctl --user mask mako.service"
 }
 
 cmd_niri() {
@@ -4272,9 +4298,9 @@ verify_grub_theme() {
   local stub; stub=$(theme_stub); stub=${stub:-mocha}
   diff -rq -x '*.pf2' "$DOTFILES/grub/themes/$stub" "$GRUB_THEME_DIR" &>/dev/null \
     || { echo "the boot menu isn't in $stub (run --theme)"; return 1; }
-  local fonts="FiraCode"
-  grep -qE "^[[:space:]]*loadfont .*grub/themes/dotfiles/fira-20\.pf2" /boot/grub/grub.cfg 2>/dev/null \
-    || fonts="GRUB's Unifont (FiraCode missing: install fonts, then --setup)"
+  local fonts="Terminus"
+  grep -qE "^[[:space:]]*loadfont .*grub/themes/dotfiles/terminus-20\.pf2" /boot/grub/grub.cfg 2>/dev/null \
+    || fonts="GRUB's Unifont (Terminus not loaded: run --setup)"
   if grep -q "^submenu 'Advanced options" /boot/grub/grub.cfg && ! grep -q "^submenu 'Advanced options.*--class submenu" /boot/grub/grub.cfg; then
     echo "the Advanced options entry has no icon class (run --setup)"; return 1
   fi

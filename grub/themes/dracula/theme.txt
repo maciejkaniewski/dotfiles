@@ -5,8 +5,16 @@ title-text: ""
 desktop-image: "background.png"
 desktop-image-scale-method: "stretch"
 desktop-color: "#282a36"
+# GRUB's text console — shown while it loads Linux after a pick, and for the
+# "c" console — covers the whole screen with no frame, over the background.
+# Framed, it showed as a large empty panel during every boot (quiet boot
+# prints nothing into it).
 terminal-font: "Unifont Regular 16"
-terminal-box: "menu_*.png"
+terminal-left: "0"
+terminal-top: "0"
+terminal-width: "100%"
+terminal-height: "100%"
+terminal-border: "0"
 
 + boot_menu {
   left = 50%-310
@@ -14,8 +22,8 @@ terminal-box: "menu_*.png"
   width = 620
   height = 284
   menu_pixmap_style = "menu_*.png"
-  item_font = "FiraCode Nerd Font Regular 20"
-  selected_item_font = "FiraCode Nerd Font Regular 20"
+  item_font = "Terminus Regular 20"
+  selected_item_font = "Terminus Regular 20"
   item_color = "#f8f8f2"
   selected_item_color = "#f8f8f2"
   selected_item_pixmap_style = "select_*.png"
@@ -48,12 +56,12 @@ terminal-box: "menu_*.png"
   width = 620
   align = "center"
   text = "Booting in %d s"
-  font = "FiraCode Nerd Font Regular 16"
+  font = "Terminus Regular 16"
   color = "#6272a4"
 }
 
 + image {
-  left = 50%-259
+  left = 50%-232
   top = 100%-100
   file = "hints.png"
 }
