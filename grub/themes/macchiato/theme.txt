@@ -1,0 +1,59 @@
+# GRUB boot menu, Catppuccin Macchiato. Written by grub/generate.py — change that and re-run
+# it rather than editing this file. Icons: catppuccin/grub (MIT, grub/icons/LICENSE).
+
+title-text: ""
+desktop-image: "background.png"
+desktop-image-scale-method: "stretch"
+desktop-color: "#24273a"
+terminal-font: "Unifont Regular 16"
+terminal-box: "menu_*.png"
+
++ boot_menu {
+  left = 50%-310
+  top = 50%-160
+  width = 620
+  height = 284
+  menu_pixmap_style = "menu_*.png"
+  item_font = "FiraCode Nerd Font Regular 20"
+  selected_item_font = "FiraCode Nerd Font Regular 20"
+  item_color = "#cad3f5"
+  selected_item_color = "#cad3f5"
+  selected_item_pixmap_style = "select_*.png"
+  icon_width = 28
+  icon_height = 28
+  item_icon_space = 16
+  item_height = 48
+  item_padding = 12
+  item_spacing = 8
+  scrollbar = true
+  scrollbar_width = 4
+  scrollbar_thumb = "scroll_thumb_*.png"
+}
+
++ progress_bar {
+  id = "__timeout__"
+  left = 50%-286
+  top = 50%+142
+  width = 572
+  height = 28
+  bar_style = "progress_bar_*.png"
+  highlight_style = "progress_highlight_*.png"
+  show_text = false
+}
+
++ label {
+  id = "__timeout__"
+  left = 50%-310
+  top = 50%+172
+  width = 620
+  align = "center"
+  text = "Booting in %d s"
+  font = "FiraCode Nerd Font Regular 16"
+  color = "#5b6078"
+}
+
++ image {
+  left = 50%-259
+  top = 100%-100
+  file = "hints.png"
+}

@@ -130,6 +130,12 @@ dotfiles/
 │           └── 99-amd-epp.rules       # copied to /etc by --setup on AMD laptops with an old power-profiles-daemon: runs set-epp on plug/unplug
 ├── LICENSE                            # MIT
 ├── README.md                          # overview and quick start
+├── grub/
+│   ├── generate.py                    # writes themes/: the boot menu per theme, from kitty, GTK and the niri wallpaper
+│   ├── preview.sh                     # boots a theme in real GRUB (QEMU) and screenshots it
+│   ├── icons/                         # catppuccin/grub's OS icons (MIT), recoloured per theme by generate.py
+│   └── themes/
+│       └── {variant}/                 # one GRUB theme per theme; --setup / --theme copy it to /boot/grub/themes/dotfiles
 ├── install.sh
 ├── patches/
 │   └── swaylock-effects/             # applied by --niri before building: second-time-zone adds the lock screen's extra clock

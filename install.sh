@@ -2611,6 +2611,118 @@ install_firewall() {
   "$DOTFILES/.local/bin/ports" firewall
 }
 
+# ── GRUB boot menu ───────────────────────────────────────────────────────────────
+# The boot menu in the theme's colours: the niri wallpaper's glows behind a
+# translucent panel holding the menu, a countdown bar, and the keys to press.
+# grub/themes holds one GRUB theme per stub, written by grub/generate.py from
+# the repo's own theme files (and checked in real GRUB with grub/preview.sh).
+# GRUB_THEME points at one fixed folder under /boot — which GRUB can read even
+# when the root file system is encrypted — and switching themes replaces what
+# is in it, so it needs no update-grub. Fonts aren't kept in the repo: FiraCode
+# is converted from the copy install_fonts installs, and the console keeps the
+# Unifont GRUB ships.
+GRUB_THEME_DIR=/boot/grub/themes/dotfiles
+GRUB_THEME_LINE="GRUB_THEME=\"$GRUB_THEME_DIR/theme.txt\""
+GRUB_FONT_TTF="$HOME/.local/share/fonts/FiraCodeNerdFont-Regular.ttf"
+
+grub_in_use() { [[ -f /etc/default/grub && -d /boot/grub ]] && command_exists update-grub; }
+grub_theme_managed() { grep -qxF "$GRUB_THEME_LINE" /etc/default/grub 2>/dev/null; }
+
+# The stub of the theme in ~/.config/theme/current, named as apply_theme names it.
+theme_stub() {
+  local family variant
+  [[ -f "$HOME/.config/theme/current" ]] && read -r family variant < "$HOME/.config/theme/current"
+  case "$family" in
+    catppuccin) echo "$variant" ;;
+    gruvbox)    echo "gruvbox-$variant" ;;
+    dracula)    echo dracula ;;
+  esac
+}
+
+# Puts theme $1 in GRUB's folder: copied beside it, then renamed into place, so
+# a boot never finds half a theme. Returns 0 when it changed, 1 when that theme
+# is there already (checked without sudo: the files are world-readable), 2 on
+# failure.
+grub_theme_activate() {
+  local src="$DOTFILES/grub/themes/$1" new="$GRUB_THEME_DIR.new" old="$GRUB_THEME_DIR.old" sz
+  [[ -f "$src/theme.txt" ]] || return 2
+  diff -rq -x '*.pf2' "$src" "$GRUB_THEME_DIR" &>/dev/null && return 1
+  sudo mkdir -p "${GRUB_THEME_DIR%/*}" && sudo rm -rf "$new" "$old" && sudo cp -r "$src" "$new" || return 2
+  [[ -f /usr/share/grub/unicode.pf2 ]] && sudo cp /usr/share/grub/unicode.pf2 "$new/font.pf2"
+  # The menu's FiraCode at its two sizes, ASCII, Latin-1/Extended-A and arrows.
+  # update-grub loads every .pf2 here; without them GRUB falls back to Unifont.
+  if [[ -f "$GRUB_FONT_TTF" ]] && command_exists grub-mkfont; then
+    for sz in 16 20; do
+      sudo grub-mkfont -s "$sz" -r 0x20-0x7E -r 0xA0-0x17F -r 0x2190-0x2193 \
+        -o "$new/fira-$sz.pf2" "$GRUB_FONT_TTF" || return 2
+    done
+  fi
+  { [[ ! -e "$GRUB_THEME_DIR" ]] || sudo mv "$GRUB_THEME_DIR" "$old"; } \
+    && sudo mv "$new" "$GRUB_THEME_DIR" && sudo rm -rf "$old" || return 2
+}
+
+# GRUB_GFXMODE for every screen this machine boots on, so the menu comes up at
+# that screen's own resolution rather than a blurry fallback: the built-in
+# panel's native mode first (where the menu shows with the lid open), then each
+# monitor GNOME has seen (~/.config/monitors.xml), then whatever was set, then
+# 1080p and auto. GRUB takes the first one the firmware offers. Modes taller
+# than 1600 are left out: GRUB can't scale, so on a 4K screen the menu would be
+# a sixth of the width — 1080p shows it at a readable size there.
+grub_gfx_modes() {
+  local f cur
+  cur=$(sed -n -E 's/^GRUB_GFXMODE="?([^"]*)"?$/\1/p' /etc/default/grub 2>/dev/null)
+  {
+    for f in /sys/class/drm/card*-eDP-*/modes /sys/class/drm/card*-LVDS-*/modes; do
+      [[ -s "$f" ]] && head -1 "$f"
+    done
+    [[ -f "$HOME/.config/monitors.xml" ]] && grep -oE '<(width|height)>[0-9]+' "$HOME/.config/monitors.xml" \
+      | cut -d'>' -f2 | paste -d x - -
+    tr ',' '\n' <<<"$cur"
+    echo 1920x1080
+  } 2>/dev/null | grep -xE '[0-9]+x[0-9]+' | awk -Fx '$2 <= 1600 && !seen[$0]++' | paste -sd, - | sed 's/$/,auto/'
+}
+
+install_grub_theme() {
+  grub_in_use || { log_skip "GRUB theme (GRUB isn't the bootloader here)"; return; }
+  # Before a theme is picked, Mocha (configure_theme's fallback); picking one
+  # later switches it.
+  local stub; stub=$(theme_stub); stub=${stub:-mocha}
+  grub_theme_activate "$stub"
+  case $? in
+    0) log_ok "GRUB theme → $stub" ;;
+    1) log_skip "GRUB theme ($stub)" ;;
+    *) log_error "GRUB theme" "could not copy grub/themes/$stub into $GRUB_THEME_DIR"; return ;;
+  esac
+
+  local modes changed=false
+  modes=$(grub_gfx_modes)
+  [[ -e /etc/default/grub.dotfiles-bak ]] || sudo cp /etc/default/grub /etc/default/grub.dotfiles-bak
+  if grub_theme_managed; then
+    log_skip "GRUB_THEME → $GRUB_THEME_DIR"
+  else
+    if grep -qE '^#?[[:space:]]*GRUB_THEME=' /etc/default/grub; then
+      sudo sed -i -E "0,/^#?[[:space:]]*GRUB_THEME=.*/s||$GRUB_THEME_LINE|" /etc/default/grub
+    else
+      echo "$GRUB_THEME_LINE" | sudo tee -a /etc/default/grub >/dev/null
+    fi
+    log_ok "GRUB_THEME → $GRUB_THEME_DIR"; changed=true
+  fi
+  if grep -qxF "GRUB_GFXMODE=\"$modes\"" /etc/default/grub; then
+    log_skip "GRUB_GFXMODE ($modes)"
+  else
+    if grep -qE '^#?[[:space:]]*GRUB_GFXMODE=' /etc/default/grub; then
+      sudo sed -i -E "0,/^#?[[:space:]]*GRUB_GFXMODE=.*/s||GRUB_GFXMODE=\"$modes\"|" /etc/default/grub
+    else
+      echo "GRUB_GFXMODE=\"$modes\"" | sudo tee -a /etc/default/grub >/dev/null
+    fi
+    log_ok "GRUB_GFXMODE → $modes"; changed=true
+  fi
+  [[ "$changed" == true ]] || return 0
+  run_spin "updating GRUB's config..." sudo update-grub \
+    && log_ok "GRUB config regenerated (the previous /etc/default/grub is in grub.dotfiles-bak)" \
+    || log_error "update-grub" "failed — the old theme stays until it runs: sudo update-grub"
+}
+
 # ── niri desktop ───────────────────────────────────────────────────────────────
 # niri (a scrollable-tiling Wayland compositor) as a second session on the login
 # screen, beside GNOME. Opt-in: --setup asks, or --niri adds it on its own;
@@ -3521,6 +3633,18 @@ apply_theme() {
 
   command_exists bat && bat cache --build &>/dev/null
 
+  # GRUB's boot menu, where --setup pointed GRUB_THEME at the dotfiles' folder.
+  # Only an actual change needs sudo, so re-applying the same theme asks for
+  # no password.
+  if grub_theme_managed; then
+    grub_theme_activate "$stub"
+    case $? in
+      0) log_ok "${SUBTEXT}GRUB boot menu → ${label}${RESET}" ;;
+      1) log_ok "${SUBTEXT}GRUB boot menu → ${label} (already)${RESET}" ;;
+      *) log_error "GRUB boot menu" "could not copy grub/themes/$stub into $GRUB_THEME_DIR" ;;
+    esac
+  fi
+
   # GTK 3 apps in adw-gtk3, which takes the theme's colours, where --niri
   # installed it, or else in the Yaru accent closest to the theme; and Papirus
   # icons where installed (--niri installs them too). Both are GNOME-wide
@@ -4092,6 +4216,20 @@ verify_logs_firewall() {
   echo "journal capped at 500M; ufw on, incoming blocked by default"
 }
 
+# Only where --setup took over GRUB_THEME: grub.cfg loads the fixed folder, and
+# the folder holds the theme ~/.config/theme/current names.
+verify_grub_theme() {
+  grep -qE "^[[:space:]]*set theme=.*grub/themes/dotfiles/theme\.txt" /boot/grub/grub.cfg 2>/dev/null \
+    || { echo "grub.cfg doesn't load $GRUB_THEME_DIR (run: sudo update-grub)"; return 1; }
+  local stub; stub=$(theme_stub); stub=${stub:-mocha}
+  diff -rq -x '*.pf2' "$DOTFILES/grub/themes/$stub" "$GRUB_THEME_DIR" &>/dev/null \
+    || { echo "the boot menu isn't in $stub (run --theme)"; return 1; }
+  local fonts="FiraCode"
+  grep -qE "^[[:space:]]*loadfont .*grub/themes/dotfiles/fira-20\.pf2" /boot/grub/grub.cfg 2>/dev/null \
+    || fonts="GRUB's Unifont (FiraCode missing: install fonts, then --setup)"
+  echo "boot menu in $stub, $fonts"
+}
+
 verify_dpkg_state() {
   local out; out=$(dpkg -C 2>&1)
   [[ -z "$out" ]] || { echo 'dpkg reports half-configured or broken packages'; return 1; }
@@ -4123,6 +4261,7 @@ verify_install() {
   epp_rule_wanted && vcheck "CPU power rule" verify_amd_epp
   pkg_installed zram-tools && vcheck "zram swap" verify_zram
   vcheck "logs + firewall"   verify_logs_firewall
+  grub_theme_managed && vcheck "GRUB theme" verify_grub_theme
   [[ -x "$NIRI_BIN" ]] && vcheck "niri desktop" verify_niri
   vcheck "shell lint"        verify_shell_lint
   vcheck "dpkg state"        verify_dpkg_state
@@ -4224,6 +4363,9 @@ cmd_setup() {
   section "Logs and firewall"
   install_journal_cap
   install_firewall
+
+  section "Boot menu"
+  install_grub_theme
 
   # Opt-in: the question above, or --niri on its own later.
   section "niri desktop"
@@ -4585,6 +4727,8 @@ usage() {
   echo -e "    ${TEXT}${BOLD}Logs and firewall${RESET}"
   echo -e "      ${SUBTEXT}journal cap          ${TEXT}system logs kept to 500M (journald's default allows up to 4G)${RESET}"
   echo -e "      ${SUBTEXT}ufw                  ${TEXT}firewall on when off: incoming blocked, SSH allowed if a server is installed; ports share opens its ports${RESET}"
+  echo -e "    ${TEXT}${BOLD}Boot menu${RESET}"
+  echo -e "      ${SUBTEXT}GRUB theme           ${TEXT}the boot menu in the theme's colours and wallpaper glows, at each screen's own resolution; --theme switches it${RESET}"
   echo -e "    ${TEXT}${BOLD}Configuration${RESET}"
   echo -e "      ${SUBTEXT}Dotfile symlinks${RESET}"
   echo -e "      ${SUBTEXT}Theme                ${TEXT}pick Catppuccin (frappe/macchiato/mocha), Gruvbox Dark, or Dracula — kitty + bat + nvim + fzf + eza + tab bar + btop + zsh-syntax-highlighting + lazygit + delta + Powerlevel10k + yazi, and the niri session's bar, launcher, notifications and lock screen${RESET}"

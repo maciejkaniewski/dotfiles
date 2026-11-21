@@ -143,6 +143,15 @@ At the end of `--setup` you are asked for your git name and email, which go into
 | journal cap | `50-max-size.conf` in `/etc/systemd/journald.conf.d` keeps the system logs to 500M; journald's default allows 10% of the disk, up to 4G |
 | ufw | Ubuntu ships the firewall off. When it is off, `--setup` turns it on with incoming connections blocked and outgoing allowed, keeps SSH reachable where an SSH server is installed, and names any listener the firewall now hides. A firewall already on is left as it is. `ports share` opens its TCP ports itself — see [Serial ports](serial-ports.md) |
 
+**Boot menu**
+
+| What | Description |
+|---|---|
+| GRUB theme | The boot menu in the theme's colours: the niri wallpaper's glows behind a translucent panel holding the menu, a countdown bar and the keys to press. Copied into `/boot/grub/themes/dotfiles`, which `GRUB_THEME` points at, so `--theme` switches it without `update-grub` (it asks for sudo only when the theme actually changes). The menu's FiraCode is converted with `grub-mkfont` from the copy installed above. Only where GRUB is the bootloader; `/etc/default/grub` is backed up to `grub.dotfiles-bak` first |
+| `GRUB_GFXMODE` | Every screen this machine boots on, so the menu comes up at that screen's own resolution: the built-in panel's native mode, then each monitor GNOME has seen (`~/.config/monitors.xml`), then 1920x1080 and `auto`. Modes taller than 1600 are left out — GRUB can't scale, so the menu would be tiny on a 4K screen |
+
+The themes in `grub/themes` are written by `grub/generate.py` (Python with Pillow) from the repo's kitty, GTK and wallpaper files — re-run it after changing a palette, and check the result in real GRUB with `grub/preview.sh STUB [WxH ...]`, which boots it in QEMU (needs `qemu-system-x86 ovmf xorriso mtools`). Neither runs during `--setup`.
+
 ## Machine-local files
 
 These files are **not** tracked in dotfiles — they are machine-specific and generated during setup:
