@@ -43,7 +43,9 @@ At the end of `--setup` you are asked for your git name and email, which go into
 | `git` | Version control system, from the [git-core PPA](https://launchpad.net/~git-core/+archive/ubuntu/ppa), which follows upstream releases; Ubuntu's own stays at the version the release shipped with (2.43 on 24.04) |
 | `git-lfs` | Git Large File Storage, for repos that keep binaries in LFS. Its filter is in the tracked `.gitconfig`, so `git lfs install` has nothing left to change |
 | `libxkbcommon-x11-0` | X11 keyboard library the prebuilt Kitty needs to open a window (missing on a fresh 26.04) |
+| `nvme-cli` | NVMe drive tools: `sudo nvme device-self-test /dev/nvme0 -s 1` runs the drive's own short self-test, `sudo nvme self-test-log /dev/nvme0` shows the result (Ubuntu 22.04's `smartctl` is too old to start one on NVMe) |
 | `python3-dev` | Python headers and `libpython`, which building and testing Python extensions written in Rust or C links against |
+| `smartmontools` | Drive health: `sudo smartctl -a /dev/nvme0` shows wear, spare blocks, errors and temperature. Its `smartd` service watches every drive in the background and logs to the system journal when one's health changes |
 | `tree` | Display directory structure as a tree |
 | `unzip` | Extract ZIP archives, used to install fonts and StyLua |
 | `valgrind` | Memory error detector and profiler |
