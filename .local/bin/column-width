@@ -1,44 +1,33 @@
 #!/usr/bin/env bash
-# column-width: Super+= / Super+- in the niri session. Steps the focused
-# column up or down through the preset widths in config.kdl, like
-# switch-preset-column-width(-back), but stops at the widest and narrowest
-# instead of wrapping round, so Super+= at full width does nothing.
+# column-width: Super+= / Super+- in the niri session. Widens or narrows the
+# focused column by 10% of the screen, like set-column-width "+10%", but
+# stops at full width: niri itself lets a column grow past the screen.
 #
 #   column-width up|down
 
 dir=${1:-}
-[[ $dir == up || $dir == down ]] || { echo "usage: column-width up|down" >&2; exit 2; }
+case $dir in
+    up) step=+10% ;;
+    down) step=-10% ;;
+    *) echo "usage: column-width up|down" >&2; exit 2 ;;
+esac
+[[ $dir == down ]] && exec niri msg action set-column-width "$step"
 
+# The gaps, from the layout block.
 config=${XDG_CONFIG_HOME:-$HOME/.config}/niri/config.kdl
+gaps=$(awk '/^layout[[:space:]]*\{/ { inl = 1 } inl && /^\}/ { inl = 0 }
+    inl && $1 == "gaps" { g = $2 } END { print (g == "" ? 16 : g) }' "$config")
 
-# The gaps and the proportional presets, from the layout block.
-read -r gaps presets < <(awk '
-    /^layout[[:space:]]*\{/ { inl = 1 }
-    inl && /^\}/ { inl = 0 }
-    inl && $1 == "gaps" { g = $2 }
-    inl && /preset-column-widths/ { inp = 1; next }
-    inp && /\}/ { inp = 0 }
-    inp && $1 == "proportion" { ps = ps " " $2 }
-    END { print (g == "" ? 16 : g), ps }' "$config")
-
-# A floating window, or no proportional presets: niri's own action.
+# A floating window: niri's own step.
 width=$(niri msg -j focused-window | jq -r 'select(.is_floating == false) | .layout.tile_size[0] // empty')
 screen=$(niri msg -j focused-output | jq -r '.logical.width // empty')
-if [[ -z $width || -z $screen || -z $presets ]]; then
-    [[ $dir == up ]] && exec niri msg action switch-preset-column-width
-    exec niri msg action switch-preset-column-width-back
-fi
+[[ -n $width && -n $screen ]] || exec niri msg action set-column-width "$step"
 
 # The column's width as a proportion of the screen, the way niri counts it (a
-# proportion p of a screen W wide with gaps g is a tile (W - g)p - g wide), and
-# the next preset past it. None past it: already at the end, nothing to do. A
-# window with a minimum width (kitty's window rule) may sit above the smallest
-# preset; stepping down to it then changes nothing, rather than wrapping round.
-target=$(awk -v w="$width" -v s="$screen" -v g="$gaps" -v dir="$dir" -v ps="$presets" 'BEGIN {
-    p = (w + g) / (s - g); e = 2 / s; n = split(ps, a, " ")
-    for (i = 1; i <= n; i++) {
-        if (dir == "up" && a[i] > p + e && (t == "" || a[i] < t)) t = a[i]
-        if (dir == "down" && a[i] < p - e && (t == "" || a[i] > t)) t = a[i]
-    }
-    if (t != "") printf "%.3f%%", t * 100 }')
-[[ -z $target ]] || niri msg action set-column-width "$target"
+# proportion p of a screen W wide with gaps g is a tile (W - g)p - g wide).
+# Already full: nothing. Less than a step from full: exactly full.
+step=$(awk -v w="$width" -v s="$screen" -v g="$gaps" -v step="$step" 'BEGIN {
+    p = (w + g) / (s - g); e = 2 / s
+    if (p >= 1 - e) exit
+    print (p + 0.1 >= 1 - e ? "100%" : step) }')
+[[ -z $step ]] || niri msg action set-column-width "$step"

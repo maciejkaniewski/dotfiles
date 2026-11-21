@@ -29,9 +29,6 @@ cursor {
 layout {
     gaps 24
     center-focused-column "never"
-    // Super+R and Super+= / Super+- step through these, so a column never
-    // grows past the screen (a +10% step would: niri doesn't stop at 100%).
-    // column-width reads this list, so keep the entries proportions.
     preset-column-widths {
         proportion 0.25
         proportion 0.33333
@@ -473,8 +470,8 @@ binds {
     Mod+Shift+B hotkey-overlay-title="Make this the main bar's screen" { spawn "waybar-launch" "--set-main"; }
     Mod+Ctrl+F  { expand-column-to-available-width; }
     Mod+C       { center-column; }
-    // = and - step through the same widths as R, but stop at full width and
-    // at a quarter rather than wrapping round (.local/bin/column-width).
+    // = and - change the width by 10% of the screen, stopping at full width
+    // (.local/bin/column-width): niri's own +10% would go past the screen.
     Mod+Minus       { spawn "column-width" "down"; }
     Mod+Equal       { spawn "column-width" "up"; }
     Mod+Shift+Minus { set-window-height "-10%"; }

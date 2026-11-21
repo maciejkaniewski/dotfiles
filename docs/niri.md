@@ -91,7 +91,7 @@ Each of these leaves a stamp in `/usr/local/share/dotfiles/`, so `--setup` rebui
 | `Super+B` | Hide or show the bar; windows take the space |
 | `Super+Shift+B` | Make the focused screen the main one, with the full bar |
 | `Super+C` | Centre the column |
-| `Super+-` / `Super+=` | Step the column width down or up through the same sizes, stopping at a quarter and at full width (`.local/bin/column-width`) |
+| `Super+-` / `Super+=` | Narrow or widen the column by 10%, never past full width (`.local/bin/column-width`) |
 | `Super+[` / `Super+]` | Pull a window into the neighbouring column, or push it out into its own |
 | `Super+W` | Show the column as tabs |
 | `Super+V` | Float the window, or tile it again |
