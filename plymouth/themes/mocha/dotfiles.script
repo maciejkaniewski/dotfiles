@@ -1,0 +1,116 @@
+# The dotfiles' boot splash (Catppuccin Mocha), written by plymouth/generate.py.
+
+Window.SetBackgroundTopColor(0.118, 0.118, 0.180);
+Window.SetBackgroundBottomColor(0.118, 0.118, 0.180);
+
+W = Window.GetWidth();
+H = Window.GetHeight();
+X = Window.GetX();
+Y = Window.GetY();
+
+bg_w = W; bg_h = H; bg_x = X; bg_y = Y;
+for (i = 0; i < 8 && Window.GetWidth(i); i++) {
+  if (Window.GetWidth(i) * Window.GetHeight(i) > bg_w * bg_h) {
+    bg_w = Window.GetWidth(i); bg_h = Window.GetHeight(i);
+    bg_x = Window.GetX(i); bg_y = Window.GetY(i);
+  }
+}
+background = Sprite(Image("background.png").Scale(bg_w, bg_h));
+background.SetPosition(bg_x, bg_y, -100);
+
+bar_w = Math.Min(572, W - 64);
+bar_x = X + Math.Int((W - bar_w) / 2);
+bar_y = Y + Math.Int(H / 2);
+
+track = Sprite(Image("bar-track.png").Scale(bar_w, 4));
+track.SetPosition(bar_x, bar_y, 1);
+
+mode = Plymouth.GetMode();
+if (mode == "shutdown")
+  label_image = Image("label-shutdown.png");
+else if (mode == "reboot")
+  label_image = Image("label-reboot.png");
+else
+  label_image = Image("label-boot.png");
+label = Sprite(label_image);
+label.SetPosition(X + Math.Int((W - label_image.GetWidth()) / 2),
+                  bar_y + 36 - Math.Int(label_image.GetHeight() / 2), 3);
+
+# A short piece of the bar slides to and fro until the splash closes: how
+# far a boot has got can't be told (Plymouth's estimate runs to the end of the
+# whole boot, past the login screen, and moves from boot to boot), so the bar
+# only says the machine is busy, like a spinner.
+segment = Sprite(Image("bar-fill.png").Scale(140, 4));
+segment.SetPosition(bar_x, bar_y, 2);
+frame = 0;
+
+fun refresh() {
+  global.frame = global.frame + 1;
+  room = global.bar_w - 140;
+  t = (1 - Math.Cos(global.frame / 40)) / 2;
+  global.segment.SetPosition(global.bar_x + Math.Int(room * t), global.bar_y, 2);
+}
+Plymouth.SetRefreshFunction(refresh);
+
+# A password (an encrypted disk) or a question: its prompt in the label's
+# place, a dot per character underneath (up to 32, made up front).
+question = Sprite();
+bullet_image = Image("bullet.png");
+for (i = 0; i < 32; i++) {
+  bullets[i] = Sprite(bullet_image);
+  bullets[i].SetOpacity(0);
+}
+
+fun show_bullets(n) {
+  n = Math.Min(n, 32);
+  step = 16;
+  x0 = global.X + Math.Int((global.W - (n - 1) * step - global.bullet_image.GetWidth()) / 2);
+  for (i = 0; i < 32; i++) {
+    global.bullets[i].SetPosition(x0 + i * step, global.bar_y + 36 + 24, 3);
+    if (i < n) global.bullets[i].SetOpacity(1);
+    else global.bullets[i].SetOpacity(0);
+  }
+}
+
+fun show_question(text, n) {
+  image = Image.Text(text, 0.804, 0.839, 0.957, 1, "Ubuntu Mono 13");
+  global.question.SetImage(image);
+  global.question.SetPosition(global.X + Math.Int((global.W - image.GetWidth()) / 2),
+                              global.bar_y + 36 - Math.Int(image.GetHeight() / 2), 3);
+  global.question.SetOpacity(1);
+  global.label.SetOpacity(0);
+  show_bullets(n);
+}
+
+fun display_password(text, n) {
+  if (text == "") text = "Password";
+  show_question(text, n);
+}
+Plymouth.SetDisplayPasswordFunction(display_password);
+
+fun display_question(text, entry) {
+  show_question(text + " " + entry, 0);
+}
+Plymouth.SetDisplayQuestionFunction(display_question);
+
+fun display_normal() {
+  global.question.SetOpacity(0);
+  global.label.SetOpacity(1);
+  show_bullets(0);
+}
+Plymouth.SetDisplayNormalFunction(display_normal);
+
+# Messages (fsck and the like), small, well under the label.
+message = Sprite();
+fun display_message(text) {
+  image = Image.Text(text, 0.345, 0.357, 0.439, 1, "Ubuntu Mono 11");
+  global.message.SetImage(image);
+  global.message.SetPosition(global.X + Math.Int((global.W - image.GetWidth()) / 2),
+                             global.bar_y + 36 + 56, 3);
+  global.message.SetOpacity(1);
+}
+fun hide_message(text) {
+  global.message.SetOpacity(0);
+}
+Plymouth.SetDisplayMessageFunction(display_message);
+Plymouth.SetHideMessageFunction(hide_message);

@@ -139,6 +139,10 @@ dotfiles/
 │   └── themes/
 │       └── {variant}/                 # one GRUB theme per theme; --setup / --theme copy it to /boot/grub/themes/dotfiles
 ├── install.sh
+├── plymouth/
+│   ├── generate.py                    # writes themes/: the boot splash per theme, from grub/generate.py's colours
+│   └── themes/
+│       └── {variant}/                 # one Plymouth theme per theme; --setup / --theme copy it, with GRUB's background, to /usr/share/plymouth/themes/dotfiles
 ├── patches/
 │   └── swaylock-effects/             # applied by --niri before building: second-time-zone adds the lock screen's extra clock
 ├── usr/                               # copied to / by --setup alongside 99-amd-epp.rules

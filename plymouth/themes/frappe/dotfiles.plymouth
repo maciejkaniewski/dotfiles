@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Dotfiles (Catppuccin Frappe)
+Description=The dotfiles' boot splash: the GRUB menu's background and bar, in Catppuccin Frappe.
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/dotfiles
+ScriptFile=/usr/share/plymouth/themes/dotfiles/dotfiles.script

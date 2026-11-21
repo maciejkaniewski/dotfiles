@@ -2783,6 +2783,193 @@ install_grub_theme() {
     || log_error "update-grub" "failed — the old theme stays until it runs: sudo update-grub"
 }
 
+# ── Boot splash ─────────────────────────────────────────────────────────────────
+# Plymouth's splash while Ubuntu starts, shuts down or restarts, in place of
+# Ubuntu's (the firmware's logo again, a spinner and the Ubuntu logo). It
+# carries on from the GRUB menu: the same background and bar in the theme's
+# colours, "Starting Ubuntu" under it (plymouth/themes, written by
+# plymouth/generate.py). A LUKS password prompt shows there too. Where
+# Plymouth starts from the root file system (Ubuntu's default without
+# FRAMEBUFFER=y), a new theme shows from the next boot with nothing rebuilt;
+# where the initramfs carries Plymouth too (FRAMEBUFFER=y, e.g. for a disk
+# password), that is rebuilt as well, about 15 seconds a kernel. Putting it
+# there on purpose was tried: it hid fsck's "clean" line before the splash but
+# made the kernel stage 1.5 s slower. Ubuntu's splash back:
+#   sudo update-alternatives --auto default.plymouth
+# (and sudo update-initramfs -u -k all where the initramfs carries Plymouth;
+# the next --setup makes it the dotfiles' again).
+SPLASH_DIR=/usr/share/plymouth/themes/dotfiles
+SPLASH_FILE=$SPLASH_DIR/dotfiles.plymouth
+
+splash_possible() {
+  compgen -G "/usr/lib/*/plymouth/script.so" >/dev/null && command_exists update-initramfs
+}
+splash_managed() {
+  [[ "$(update-alternatives --query default.plymouth 2>/dev/null | sed -n 's/^Value: //p')" == "$SPLASH_FILE" ]]
+}
+# Whether the initramfs the next boot uses carries Plymouth, and whether it
+# holds theme $1: generate.py puts an empty stub-<theme> file in each, and
+# lsinitramfs lists names.
+splash_initramfs_has_plymouth() {
+  lsinitramfs /boot/initrd.img 2>/dev/null | grep -qx "usr/sbin/plymouthd"
+}
+splash_in_initramfs() {
+  lsinitramfs /boot/initrd.img 2>/dev/null | grep -qx "usr/share/plymouth/themes/dotfiles/stub-$1"
+}
+
+# Puts theme $1, with GRUB's background for it, in Plymouth's folder: copied
+# beside it, then renamed into place. Returns 0 when it changed, 1 when that
+# theme is there already (checked without sudo), 2 on failure.
+splash_activate() {
+  local src="$DOTFILES/plymouth/themes/$1" bg="$DOTFILES/grub/themes/$1/background.png"
+  local new="$SPLASH_DIR.new" old="$SPLASH_DIR.old"
+  [[ -f "$src/dotfiles.script" && -f "$bg" ]] || return 2
+  diff -rq -x background.png "$src" "$SPLASH_DIR" &>/dev/null && cmp -s "$bg" "$SPLASH_DIR/background.png" && return 1
+  sudo rm -rf "$new" "$old" && sudo cp -r "$src" "$new" && sudo cp "$bg" "$new/background.png" || return 2
+  { [[ ! -e "$SPLASH_DIR" ]] || sudo mv "$SPLASH_DIR" "$old"; } \
+    && sudo mv "$new" "$SPLASH_DIR" && sudo rm -rf "$old" || return 2
+}
+
+splash_rebuild() {
+  run_spin "rebuilding the initramfs, which carries the boot splash..." sudo update-initramfs -u -k all \
+    && log_ok "initramfs rebuilt with the new splash" \
+    || log_error "update-initramfs" "failed — the old splash stays until it runs: sudo update-initramfs -u -k all"
+}
+
+install_boot_splash() {
+  splash_possible || { log_skip "boot splash (no Plymouth with its script plugin here)"; return; }
+  local stub rc changed=false
+  stub=$(theme_stub); stub=${stub:-mocha}
+  splash_activate "$stub"; rc=$?
+  case $rc in
+    0) log_ok "boot splash → $stub"; changed=true ;;
+    1) log_skip "boot splash ($stub)" ;;
+    *) log_error "boot splash" "could not copy plymouth/themes/$stub into $SPLASH_DIR"; return ;;
+  esac
+  if splash_managed; then
+    log_skip "Plymouth theme → dotfiles"
+  else
+    # Priority 100, under Ubuntu's own (bgrt is 110), and chosen by hand:
+    # --auto then gives Ubuntu's back.
+    sudo update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "$SPLASH_FILE" 100 >/dev/null \
+      && sudo update-alternatives --set default.plymouth "$SPLASH_FILE" >/dev/null \
+      && log_ok "Plymouth theme → dotfiles (Ubuntu's back: see docs/installation.md)" \
+      || { log_error "update-alternatives" "could not make the dotfiles splash Plymouth's theme"; return; }
+    changed=true
+  fi
+  grep -qw splash /proc/cmdline \
+    || log_warn "the kernel line has no 'splash' (GRUB_CMDLINE_LINUX_DEFAULT), so the splash shows only on shutdown"
+  # Also when an earlier rebuild failed or was skipped.
+  if splash_initramfs_has_plymouth; then
+    splash_in_initramfs "$stub" || changed=true
+    [[ "$changed" == true ]] && splash_rebuild
+  fi
+  return 0
+}
+
+# ── Login screen background ───────────────────────────────────────────────────────
+# The login screen (GDM) keeps Ubuntu's look, with the desktop's wallpaper
+# behind it: ~/.config/niri/wallpaper, or the theme's glow (GRUB's background)
+# where there is none or it is an SVG. GDM takes its look from one gresource
+# file, picked by the gdm-theme.gresource alternative; this one is Yaru's own,
+# rebuilt with the picture added and one rule at the end of its stylesheets.
+# Registered below Yaru and chosen by hand, so Ubuntu's comes back with:
+#   sudo update-alternatives --auto gdm-theme.gresource
+# It shows from the next time the login screen starts. --setup, --theme and
+# --login-bg make it; the wallpaper keys don't (it needs sudo), so after
+# changing the wallpaper, ./install.sh --login-bg brings the login screen along.
+LOGIN_DIR=/usr/share/gnome-shell/theme/dotfiles
+LOGIN_RES=$LOGIN_DIR/gnome-shell-theme.gresource
+YARU_RES=/usr/share/gnome-shell/theme/Yaru/gnome-shell-theme.gresource
+LOGIN_CSS='
+/* dotfiles: the desktop wallpaper behind the login screen */
+#lockDialogGroup {
+  background: #1d1d1d url("resource:///org/gnome/shell/theme/dotfiles-login.@EXT@");
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center; }
+'
+
+login_bg_possible() {
+  [[ -f "$YARU_RES" ]] && command_exists gdm3 && command_exists gresource
+}
+login_bg_managed() {
+  [[ "$(update-alternatives --query gdm-theme.gresource 2>/dev/null | sed -n 's/^Value: //p')" == "$LOGIN_RES" ]]
+}
+# The picture to use: the wallpaper, unless it's missing or an SVG (GDM's
+# toolkit can't be relied on for those), then GRUB's background for the theme.
+login_bg_image() {
+  local wp stub
+  wp=$(readlink -f "$HOME/.config/niri/wallpaper" 2>/dev/null)
+  if [[ -f "$wp" && "$wp" =~ \.(jpg|jpeg|png)$ ]]; then echo "$wp"; return; fi
+  stub=$(theme_stub); stub=${stub:-mocha}
+  echo "$DOTFILES/grub/themes/$stub/background.png"
+}
+# What the resource was made from: the picture, Yaru's resource and the rule.
+# Kept beside it, so an unchanged login screen needs no sudo.
+login_bg_stamp() {
+  { sha256sum "$1" "$YARU_RES" | cut -d' ' -f1; printf '%s' "$LOGIN_CSS" | sha256sum | cut -d' ' -f1; } | paste -sd' ' -
+}
+
+# Builds and installs the resource. Returns 0 when it changed, 1 when it was
+# already up to date, 2 on failure.
+login_bg_activate() {
+  local img ext stamp work f
+  img=$(login_bg_image); [[ -f "$img" ]] || return 2
+  ext=${img##*.}; ext=${ext,,}; [[ "$ext" == jpeg ]] && ext=jpg
+  stamp=$(login_bg_stamp "$img")
+  [[ -f "$LOGIN_RES" && "$(cat "$LOGIN_DIR/source" 2>/dev/null)" == "$stamp" ]] && return 1
+  if ! command_exists glib-compile-resources; then
+    apt_get install -y libglib2.0-dev-bin >/dev/null 2>&1 || return 2
+  fi
+  work=$(mktemp -d -p "$SCRIPT_TMPDIR") || return 2
+  # Yaru's files, as they are; then the picture and the rule.
+  while read -r f; do
+    mkdir -p "$work/res${f%/*}" && gresource extract "$YARU_RES" "$f" > "$work/res$f" || return 2
+  done < <(gresource list "$YARU_RES")
+  cp "$img" "$work/res/org/gnome/shell/theme/dotfiles-login.$ext" || return 2
+  for f in "$work/res/org/gnome/shell/theme/gdm.css" "$work/res/org/gnome/shell/theme/Yaru/gnome-shell.css"; do
+    [[ -f "$f" ]] && printf '%s' "${LOGIN_CSS//@EXT@/$ext}" >> "$f"
+  done
+  {
+    echo '<?xml version="1.0" encoding="UTF-8"?>'
+    echo '<gresources><gresource prefix="/">'
+    (cd "$work/res" && find . -type f | sed 's|^\./||' | sort | sed 's|.*|  <file>&</file>|')
+    echo '</gresource></gresources>'
+  } > "$work/res.xml"
+  glib-compile-resources --sourcedir="$work/res" --target="$work/out.gresource" "$work/res.xml" || return 2
+  printf '%s\n' "$stamp" > "$work/source"
+  sudo install -D -m 644 "$work/out.gresource" "$LOGIN_RES" \
+    && sudo install -m 644 "$work/source" "$LOGIN_DIR/source" || return 2
+  rm -rf "$work"
+}
+
+install_login_background() {
+  login_bg_possible || { log_skip "login screen background (no GDM with Yaru here)"; return; }
+  login_bg_activate
+  case $? in
+    0) log_ok "login screen background → $(basename "$(login_bg_image)")" ;;
+    1) log_skip "login screen background ($(basename "$(login_bg_image)"))" ;;
+    *) log_error "login screen background" "could not build $LOGIN_RES"; return ;;
+  esac
+  if login_bg_managed; then
+    log_skip "GDM theme → dotfiles"
+  else
+    # Priority 5, under Yaru's 15, and chosen by hand: --auto gives Yaru's back.
+    sudo update-alternatives --install /usr/share/gnome-shell/gdm-theme.gresource gdm-theme.gresource "$LOGIN_RES" 5 >/dev/null \
+      && sudo update-alternatives --set gdm-theme.gresource "$LOGIN_RES" >/dev/null \
+      && log_ok "GDM theme → dotfiles: Ubuntu's login screen with the wallpaper (shows from the next login screen)" \
+      || log_error "update-alternatives" "could not make the dotfiles resource GDM's theme"
+  fi
+}
+
+verify_login_background() {
+  local img; img=$(login_bg_image)
+  [[ "$(cat "$LOGIN_DIR/source" 2>/dev/null)" == "$(login_bg_stamp "$img")" ]] \
+    || { echo "the login screen isn't on $(basename "$img") (run --login-bg)"; return 1; }
+  echo "login screen on $(basename "$img")"
+}
+
 # ── niri desktop ───────────────────────────────────────────────────────────────
 # niri (a scrollable-tiling Wayland compositor) as a second session on the login
 # screen, beside GNOME. Opt-in: --setup asks, or --niri adds it on its own;
@@ -3721,6 +3908,29 @@ apply_theme() {
     esac
   fi
 
+  # Plymouth's boot splash, where --setup made it the dotfiles'. Where the
+  # initramfs carries Plymouth, a change means rebuilding it.
+  if splash_managed; then
+    splash_activate "$stub"
+    case $? in
+      0) log_ok "${SUBTEXT}boot splash → ${label}${RESET}"
+         splash_initramfs_has_plymouth && splash_rebuild ;;
+      1) log_ok "${SUBTEXT}boot splash → ${label} (already)${RESET}" ;;
+      *) log_error "boot splash" "could not copy plymouth/themes/$stub into $SPLASH_DIR" ;;
+    esac
+  fi
+
+  # The login screen's background, where --setup made it the wallpaper: the
+  # theme may have changed the picture (each variant has its own copies).
+  if login_bg_managed; then
+    login_bg_activate
+    case $? in
+      0) log_ok "${SUBTEXT}login screen → $(basename "$(login_bg_image)")${RESET}" ;;
+      1) log_ok "${SUBTEXT}login screen → $(basename "$(login_bg_image)") (already)${RESET}" ;;
+      *) log_error "login screen" "could not build $LOGIN_RES" ;;
+    esac
+  fi
+
   # GTK 3 apps in adw-gtk3, which takes the theme's colours, where --niri
   # installed it, or else in the Yaru accent closest to the theme; and Papirus
   # icons where installed (--niri installs them too). Both are GNOME-wide
@@ -4309,6 +4519,21 @@ verify_grub_theme() {
   echo "boot menu in $stub, $fonts, icons on every entry"
 }
 
+# Only where --setup made the dotfiles' splash Plymouth's theme: the folder
+# holds the current theme, and so does the initramfs, where it carries Plymouth.
+verify_boot_splash() {
+  local stub; stub=$(theme_stub); stub=${stub:-mocha}
+  diff -rq -x background.png "$DOTFILES/plymouth/themes/$stub" "$SPLASH_DIR" &>/dev/null \
+    || { echo "the splash isn't in $stub (run --theme)"; return 1; }
+  if splash_initramfs_has_plymouth; then
+    splash_in_initramfs "$stub" \
+      || { echo "the initramfs holds another splash (run: sudo update-initramfs -u -k all)"; return 1; }
+    echo "boot splash in $stub, in the initramfs too"
+  else
+    echo "boot splash in $stub"
+  fi
+}
+
 verify_dpkg_state() {
   local out; out=$(dpkg -C 2>&1)
   [[ -z "$out" ]] || { echo 'dpkg reports half-configured or broken packages'; return 1; }
@@ -4341,6 +4566,8 @@ verify_install() {
   pkg_installed zram-tools && vcheck "zram swap" verify_zram
   vcheck "logs + firewall"   verify_logs_firewall
   grub_theme_managed && vcheck "GRUB theme" verify_grub_theme
+  splash_managed && vcheck "boot splash" verify_boot_splash
+  login_bg_managed && vcheck "login screen" verify_login_background
   [[ -x "$NIRI_BIN" ]] && vcheck "niri desktop" verify_niri
   vcheck "shell lint"        verify_shell_lint
   vcheck "dpkg state"        verify_dpkg_state
@@ -4443,8 +4670,10 @@ cmd_setup() {
   install_journal_cap
   install_firewall
 
-  section "Boot menu"
+  section "Boot menu, splash and login screen"
   install_grub_theme
+  install_boot_splash
+  install_login_background
 
   # Opt-in: the question above, or --niri on its own later.
   section "niri desktop"
@@ -4521,6 +4750,14 @@ cmd_theme() {
 
   echo
   echo -e "\r\033[K  ${MAUVE}${BOLD}Done!${RESET} ${TEXT}Open a new terminal (or run exec zsh) to pick up the prompt and shell colors.${RESET}"
+  echo
+}
+
+cmd_login_bg() {
+  echo
+  banner
+  section "Login screen background"
+  install_login_background
   echo
 }
 
@@ -4731,6 +4968,7 @@ usage() {
   echo -e "    ${GREEN}./install.sh --llvm${RESET}        ${SUBTEXT}Show the LLVM pin, the active version and what's on disk${RESET}"
   echo -e "    ${GREEN}./install.sh --ser2net${RESET}     ${SUBTEXT}Build the newest ser2net and gensio from source, for ports share, nothing else${RESET}"
   echo -e "    ${GREEN}./install.sh --niri${RESET}        ${SUBTEXT}Add the niri tiling session to the login screen (builds niri, xwayland-satellite, Waybar)${RESET}"
+  echo -e "    ${GREEN}./install.sh --login-bg${RESET}    ${SUBTEXT}Put the current wallpaper behind the login screen (after changing it), nothing else${RESET}"
   echo -e "    ${GREEN}./install.sh -h, --help${RESET}    ${SUBTEXT}Show this help message${RESET}"
   echo
   echo -e "  ${TEXT}${BOLD}Tool versions:${RESET}"
@@ -4806,8 +5044,10 @@ usage() {
   echo -e "    ${TEXT}${BOLD}Logs and firewall${RESET}"
   echo -e "      ${SUBTEXT}journal cap          ${TEXT}system logs kept to 500M (journald's default allows up to 4G)${RESET}"
   echo -e "      ${SUBTEXT}ufw                  ${TEXT}firewall on when off: incoming blocked, SSH allowed if a server is installed; ports share opens its ports${RESET}"
-  echo -e "    ${TEXT}${BOLD}Boot menu${RESET}"
+  echo -e "    ${TEXT}${BOLD}Boot menu, splash and login screen${RESET}"
   echo -e "      ${SUBTEXT}GRUB theme           ${TEXT}the boot menu in the theme's colours and wallpaper glows, at each screen's own resolution; --theme switches it${RESET}"
+  echo -e "      ${SUBTEXT}Boot splash          ${TEXT}Plymouth carries on from the menu: its background and bar, \"Starting Ubuntu\"; --theme switches it${RESET}"
+  echo -e "      ${SUBTEXT}Login background     ${TEXT}Ubuntu's login screen with the desktop wallpaper behind it; --theme and --login-bg update it${RESET}"
   echo -e "    ${TEXT}${BOLD}Configuration${RESET}"
   echo -e "      ${SUBTEXT}Dotfile symlinks${RESET}"
   echo -e "      ${SUBTEXT}Theme                ${TEXT}pick Catppuccin (frappe/macchiato/mocha), Gruvbox Dark, or Dracula — kitty + bat + nvim + fzf + eza + tab bar + btop + zsh-syntax-highlighting + lazygit + delta + Powerlevel10k + yazi, and the niri session's bar, launcher, notifications and lock screen${RESET}"
@@ -4836,6 +5076,7 @@ case "${1}" in
   --llvm)        cmd_llvm "${2:-}" ;;
   --ser2net)     cmd_ser2net ;;
   --niri)        cmd_niri ;;
+  --login-bg)    cmd_login_bg ;;
   -h | --help)   usage ;;
   *)
     echo -e "\n  ${RED}Unknown option:${RESET} $1"
