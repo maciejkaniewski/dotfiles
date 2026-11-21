@@ -25,6 +25,11 @@ show() {
           } end'
 }
 
+# Waybar stops a module by signalling only the shell it ran it through, and
+# this writes nothing between casts, so it wouldn't notice: once that shell is
+# gone, take down the module's process group, niri msg included.
+( while kill -0 "$PPID" 2>/dev/null; do sleep 5; done; kill 0 ) &
+
 show
 niri msg -j event-stream | while IFS= read -r event; do
     [[ $event == '{"Cast'* ]] && show
