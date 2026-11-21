@@ -2926,52 +2926,78 @@ EOF
   log_ok ".config/niri/local.kdl (keyboard layout ${layout:-us}${variant:+ $variant})"
 }
 
-# The laptop's own screen at the scale GNOME uses for it, from GNOME's saved
-# layouts (~/.config/monitors.xml). Left to itself niri picks one by pixel
-# density: 125% on a 14" 1920x1200 panel that GNOME shows at 100%. Added to
-# local.kdl once, so a scale set there by hand stays; without a GNOME layout
-# niri's own pick stands.
-niri_laptop_scale() {
-  local local_kdl="$HOME/.config/niri/local.kdl" found connector scale
+# Each screen at the scale GNOME uses for it, from GNOME's saved layouts
+# (~/.config/monitors.xml): the laptop's by its connector, a monitor by niri's
+# "make model serial" name, made as niri makes it: the maker's name from the
+# PNP ID table libdisplay-info is built from, or PNP(XYZ) for a code it lacks,
+# and Unknown for a serial of 0. Left to itself niri picks a scale by pixel
+# density: 125% on a 14" 1920x1200 panel that GNOME shows at 100%. Each screen
+# is added to local.kdl once, so a scale set there by hand stays; one GNOME
+# never saw keeps niri's pick.
+niri_gnome_scales() {
+  local local_kdl="$HOME/.config/niri/local.kdl" found name scale want filter i
+  local -a added=()
   [[ -f "$local_kdl" ]] || return 0
-  if grep -q '^output "eDP' "$local_kdl"; then
-    log_skip "laptop screen scale (set in local.kdl)"; return
-  fi
-  found=$(python3 - "$HOME/.config/monitors.xml" 2>/dev/null <<'EOF'
-import collections, sys, xml.etree.ElementTree as ET
-seen = collections.Counter()
-for lm in ET.parse(sys.argv[1]).getroot().iter("logicalmonitor"):
-    for c in lm.iterfind("monitor/monitorspec/connector"):
-        if c.text.startswith("eDP"):
-            seen[(c.text, lm.findtext("scale", "1"))] += 1
-if seen:
-    print(*seen.most_common(1)[0][0])
+  [[ -f "$HOME/.config/monitors.xml" ]] || { log_skip "screen scales (no GNOME layout, niri picks)"; return; }
+  found=$(python3 - "$HOME/.config/monitors.xml" "$local_kdl" 2>/dev/null <<'EOF'
+import collections, re, sys, xml.etree.ElementTree as ET
+xml_path, kdl_path = sys.argv[1:]
+makers = {}
+try:
+    for line in open("/usr/share/hwdata/pnp.ids", encoding="utf-8", errors="replace"):
+        code, _, maker = line.rstrip("\n").partition("\t")
+        makers[code] = maker
+except OSError:
+    pass
+have = {m.replace('\\"', '"').replace("\\\\", "\\").lower()
+        for m in re.findall(r'^output "((?:[^"\\]|\\.)*)"', open(kdl_path).read(), re.M)}
+scales = collections.defaultdict(collections.Counter)
+for lm in ET.parse(xml_path).getroot().iter("logicalmonitor"):
+    for spec in lm.iterfind("monitor/monitorspec"):
+        connector, vendor, product, serial = (spec.findtext(k, "") for k in ("connector", "vendor", "product", "serial"))
+        if connector.startswith("eDP"):
+            name = connector
+        else:
+            if not serial or re.fullmatch(r"0x0+", serial, re.I):
+                serial = "Unknown"
+            name = f"{makers.get(vendor) or f'PNP({vendor})'} {product} {serial}"
+        scales[name][lm.findtext("scale", "1")] += 1
+for name, seen in scales.items():
+    if name.lower() in have or (name.startswith("eDP") and any(h.startswith("edp") for h in have)):
+        continue
+    print(f"{name}\t{seen.most_common(1)[0][0]}")
 EOF
   )
-  [[ -n "$found" ]] || { log_skip "laptop screen scale (no GNOME layout, niri picks)"; return; }
-  connector=${found% *} scale=${found#* }
-  cat >> "$local_kdl" <<EOF
-
-// The laptop's own screen at the scale GNOME uses for it (copied from
-// ~/.config/monitors.xml); left to itself niri picks one by pixel density.
-output "$connector" {
-    scale $scale
-}
-EOF
+  [[ -n "$found" ]] || { log_skip "screen scales (in local.kdl already)"; return; }
+  {
+    echo
+    echo "// Each screen at the scale GNOME uses for it, copied from ~/.config/monitors.xml"
+    echo "// by install.sh --niri; left to itself niri picks one by pixel density."
+    while IFS=$'\t' read -r name scale; do
+      name=${name//\\/\\\\}; name=${name//\"/\\\"}
+      printf 'output "%s" {\n    scale %s\n}\n' "$name" "$scale"
+      added+=("$name $scale")
+    done <<<"$found"
+  } >> "$local_kdl"
   # swaybg 1.0 (22.04) keeps drawing at the old size after a scale change, so
-  # it's restarted, but only once niri has applied the new one: it reloads a
-  # moment after the file changes, and a swaybg started before that draws at
-  # the old size again. Up to 5 s; with the screen off (lid shut) it never shows.
+  # it's restarted, but only once niri has applied the new scales to the screens
+  # connected now: it reloads a moment after the file changes, and a swaybg
+  # started before that draws at the old size again. Up to 5 s.
   if [[ -n "$NIRI_SOCKET" ]]; then
-    local i
-    for (( i = 0; i < 50; i++ )); do
-      niri msg -j outputs 2>/dev/null \
-        | jq -e --arg c "$connector" --argjson s "$scale" '.[$c].logical.scale == $s' &>/dev/null && break
-      sleep 0.1
-    done
+    want=$(jq -Rn '[inputs | split("\t") | {n: (.[0] | ascii_downcase), s: (.[1] | tonumber)}]' <<<"$found")
+    filter='[.[] | select(.logical) | . as $o
+      | ("\(.make) \(.model) \(.serial // "Unknown")" | ascii_downcase) as $id
+      | $want[] | select(.n == ($o.name | ascii_downcase) or .n == $id)
+      | $o.logical.scale == .s]'
+    if niri msg -j outputs 2>/dev/null | jq -e --argjson want "$want" "$filter | length > 0" &>/dev/null; then
+      for (( i = 0; i < 50; i++ )); do
+        niri msg -j outputs 2>/dev/null | jq -e --argjson want "$want" "$filter | all" &>/dev/null && break
+        sleep 0.1
+      done
+      restart_swaybg
+    fi
   fi
-  restart_swaybg
-  log_ok "laptop screen scale → $scale, as in GNOME"
+  log_ok "screen scales as in GNOME: $(IFS=,; echo "${added[*]}" | sed 's/,/, /g')"
 }
 
 # swaybg restarted through niri, so it stays in the session rather than tied to
@@ -3117,7 +3143,7 @@ install_niri_desktop() {
   # linked above (nm-applet's, turning it off) waits for a reboot.
   systemctl --user daemon-reload 2>/dev/null
   write_niri_local
-  niri_laptop_scale
+  niri_gnome_scales
   fetch_wallpapers
   ensure_login_path
   vscode_use_keyring
