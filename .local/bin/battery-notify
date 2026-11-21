@@ -42,4 +42,8 @@ while :; do
         last=100 saved_profile=""
     fi
     sleep "$interval"
+    # What niri starts belongs to systemd --user, which outlives a logout, and
+    # the next login's copy would find this one and quit: stop once the niri
+    # that started this is gone, its socket with it.
+    [[ -n $NIRI_SOCKET && ! -S $NIRI_SOCKET ]] && exit 0
 done

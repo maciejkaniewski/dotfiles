@@ -573,7 +573,16 @@ notify_ports() {
       fi
       (( rc == 0 )) || break
     else
-      IFS= read -r line || break
+      # Started by niri at login, this would outlive the session: what niri
+      # starts belongs to systemd --user, which stays after a logout, and the
+      # next login's copy would find this one and quit. So every 5 s, stop
+      # once that niri is gone, its socket with it.
+      IFS= read -r -t 5 line; rc=$?
+      if (( rc > 128 )); then
+        [[ -n $NIRI_SOCKET && ! -S $NIRI_SOCKET ]] && break
+        continue
+      fi
+      (( rc == 0 )) || break
     fi
     if [[ -n "$line" ]]; then
       [[ "$line" == *=* ]] && { k=${line%%=*} v=${line#*=}; P[$k]=$v; }
@@ -593,7 +602,8 @@ notify_ports() {
       esac
     fi
     P=()
-  done < <(stdbuf -oL udevadm monitor --udev --property --subsystem-match=tty)
+  done < <(exec stdbuf -oL udevadm monitor --udev --property --subsystem-match=tty)
+  kill "$!" 2>/dev/null   # udevadm, which would wait for the next plug to notice
 }
 
 # Waybar's readout of the USB serial ports: one JSON line now, then a new one
