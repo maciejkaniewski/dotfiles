@@ -1,0 +1,5 @@
+#!/bin/sh
+# systemd runs this around suspend; re-apply EPP on the way back up, in case the
+# charger was plugged in or out while asleep.
+[ "$1" = post ] && /usr/local/sbin/set-epp
+exit 0

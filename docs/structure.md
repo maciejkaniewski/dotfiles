@@ -116,16 +116,26 @@ dotfiles/
 ├── .zshrc.local.work
 ├── docs/                              # the pages README.md links to, one per topic
 ├── etc/
+│   ├── sysctl.d/
+│   │   └── 99-zram.conf               # copied to /etc by --setup: swappiness for zram swap
 │   ├── systemd/
 │   │   └── system/
+│   │       ├── epp-follow-profile.service  # copied to /etc by --setup with 99-amd-epp.rules: re-applies EPP on a profile change
 │   │       └── ser2net.service        # copied to /etc by --setup / --ser2net: the source-built ser2net, for ports share
 │   └── udev/
 │       └── rules.d/
-│           └── 98-ftdi-latency.rules  # copied to /etc by --setup: 1 ms latency on every FTDI port
+│           ├── 98-ftdi-latency.rules  # copied to /etc by --setup: 1 ms latency on every FTDI port
+│           └── 99-amd-epp.rules       # copied to /etc by --setup on AMD laptops with an old power-profiles-daemon: runs set-epp on plug/unplug
 ├── LICENSE                            # MIT
 ├── README.md                          # overview and quick start
 ├── install.sh
 ├── patches/
 │   └── swaylock-effects/             # applied by --niri before building: second-time-zone adds the lock screen's extra clock
+├── usr/                               # copied to / by --setup alongside 99-amd-epp.rules
+│   ├── lib/systemd/system-sleep/
+│   │   └── set-epp                    # re-applies EPP after resume
+│   └── local/sbin/
+│       ├── epp-follow-profile         # run by epp-follow-profile.service: set-epp on every power-profile change
+│       └── set-epp                    # EPP from the power profile, and in Balanced from the charger
 └── versions                           # exact tool versions --setup and --niri install
 ```

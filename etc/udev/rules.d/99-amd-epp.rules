@@ -1,0 +1,5 @@
+# Installed by install.sh --setup on AMD laptops whose power-profiles-daemon
+# predates amd-pstate support. Re-picks the CPU's energy/performance preference
+# whenever the charger is plugged in or out. Matched by type, not name, since
+# laptops call the supply AC, AC0, ADP1 or ACAD.
+SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ACTION=="add|change", RUN+="/usr/local/sbin/set-epp"

@@ -1,0 +1,45 @@
+#!/bin/sh
+# Sets the amd-pstate-epp energy/performance preference (EPP) from the power
+# profile and the charger state:
+#
+#   profile        on the charger          on battery
+#   performance    performance             performance
+#   balanced       balance_performance     balance_power
+#   power-saver    power                   power
+#
+# Run by 99-amd-epp.rules on plug/unplug, by epp-follow-profile.service when the
+# profile changes, and by system-sleep/set-epp after resume. --print only says
+# which EPP applies now, without setting it (install.sh --verify uses it).
+#
+# Needed only where power-profiles-daemon is too old to drive amd-pstate (0.10
+# on Ubuntu 22.04): its profiles there change the ACPI platform profile but
+# never EPP, which the kernel leaves at "performance", even on battery.
+
+# The profile from power-profiles-daemon, else the ACPI platform profile it
+# mirrors (early in boot the daemon may not be up yet), else balanced.
+profile=$(timeout 2 gdbus call --system --dest net.hadess.PowerProfiles \
+  --object-path /net/hadess/PowerProfiles --method org.freedesktop.DBus.Properties.Get \
+  net.hadess.PowerProfiles ActiveProfile 2>/dev/null | sed -n "s/^(<'\(.*\)'>,)$/\1/p")
+if [ -z "$profile" ]; then
+  case $(cat /sys/firmware/acpi/platform_profile 2>/dev/null) in
+    performance) profile=performance ;;
+    low-power | quiet | cool) profile=power-saver ;;
+  esac
+fi
+
+on_ac=false
+for s in /sys/class/power_supply/*; do
+  [ "$(cat "$s/type" 2>/dev/null)" = Mains ] && [ "$(cat "$s/online" 2>/dev/null)" = 1 ] \
+    && { on_ac=true; break; }
+done
+
+case $profile in
+  performance) epp=performance ;;
+  power-saver) epp=power ;;
+  *) if [ "$on_ac" = true ]; then epp=balance_performance; else epp=balance_power; fi ;;
+esac
+
+[ "$1" = --print ] && { echo "$epp"; exit 0; }
+for f in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
+  echo "$epp" > "$f" 2>/dev/null || true
+done

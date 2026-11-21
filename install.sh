@@ -2459,6 +2459,120 @@ cmd_ser2net() {
   install_ser2net
 }
 
+# ── Power and memory ─────────────────────────────────────────────────────────────
+# Copies repo file $1 (a path relative to $DOTFILES that mirrors where it goes
+# under /) into place with mode $2. Returns 0 when it changed something, 1 when
+# it was already up to date, 2 on failure — so a caller reloads only on 0.
+install_root_file() {
+  local rel="$1" mode="$2" src="$DOTFILES/$1" dst="/$1"
+  if cmp -s "$src" "$dst"; then
+    log_skip "$dst"; return 1
+  elif sudo install -D -m "$mode" -o root -g root "$src" "$dst"; then
+    log_ok "$dst"; return 0
+  fi
+  log_error "${rel##*/}" "could not install into ${dst%/*}"; return 2
+}
+
+EPP_FILES=(etc/udev/rules.d/99-amd-epp.rules usr/local/sbin/set-epp usr/lib/systemd/system-sleep/set-epp
+  usr/local/sbin/epp-follow-profile etc/systemd/system/epp-follow-profile.service)
+EPP_UNIT=epp-follow-profile.service
+
+# The EPP rule is only for AMD laptops whose power-profiles-daemon can't drive
+# amd-pstate itself. Those daemons (0.10, Ubuntu 22.04) only know intel_pstate:
+# their profiles switch the ACPI platform profile and leave the CPU's own
+# energy/performance preference at the kernel's "performance", on battery too.
+# 0.20+ (Ubuntu 24.04 on) handles amd-pstate, and a rule there would overwrite
+# the profile picked in the panel on every plug-in, so it is probed for — the
+# daemon's binary names its amd_pstate driver — rather than guessed by version.
+epp_rule_wanted() {
+  [[ "$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver 2>/dev/null)" == amd-pstate-epp ]] || return 1
+  grep -qx Mains /sys/class/power_supply/*/type 2>/dev/null || return 1
+  pkg_installed power-profiles-daemon || return 0
+  local bin; bin=$(dpkg -L power-profiles-daemon 2>/dev/null | grep -m1 '/power-profiles-daemon$')
+  ! grep -qa amd_pstate "$bin" 2>/dev/null
+}
+
+install_amd_epp() {
+  local f changed=false
+  if ! epp_rule_wanted; then
+    # Left over from before an upgrade that brought a daemon able to do it.
+    if [[ -e /etc/udev/rules.d/99-amd-epp.rules || -e /etc/systemd/system/$EPP_UNIT ]]; then
+      sudo systemctl disable --quiet --now "$EPP_UNIT" 2>/dev/null
+      for f in "${EPP_FILES[@]}"; do sudo rm -f "/$f"; done
+      sudo systemctl daemon-reload; sudo udevadm control --reload
+      log_ok "CPU power rule removed (power-profiles-daemon now sets EPP itself)"
+    else
+      log_skip "CPU power rule (not needed: no amd-pstate-epp laptop, or power-profiles-daemon handles it)"
+    fi
+    return
+  fi
+  local unit_changed=false
+  install_root_file usr/local/sbin/set-epp 755;                  [[ $? == 0 ]] && changed=true
+  install_root_file usr/local/sbin/epp-follow-profile 755;       [[ $? == 0 ]] && unit_changed=true
+  install_root_file "etc/systemd/system/$EPP_UNIT" 644;          [[ $? == 0 ]] && unit_changed=true
+  install_root_file usr/lib/systemd/system-sleep/set-epp 755;    [[ $? == 0 ]] && changed=true
+  install_root_file etc/udev/rules.d/99-amd-epp.rules 644;       [[ $? == 0 ]] && changed=true
+
+  # The profile watcher rides along with power-profiles-daemon (WantedBy and
+  # PartOf it), so it only runs where there is a daemon to watch.
+  if pkg_installed power-profiles-daemon; then
+    if [[ "$unit_changed" == true ]] || ! systemctl is-enabled --quiet "$EPP_UNIT" || ! systemctl is-active --quiet "$EPP_UNIT"; then
+      sudo systemctl daemon-reload && sudo systemctl enable --quiet "$EPP_UNIT" && sudo systemctl restart "$EPP_UNIT" \
+        && { log_ok "$EPP_UNIT running (EPP follows the power profile)"; changed=true; } \
+        || log_error "$EPP_UNIT" "could not start — see: journalctl -u $EPP_UNIT -n 20"
+    else
+      log_skip "$EPP_UNIT (running)"
+    fi
+  fi
+  [[ "$changed" == true ]] || return 0
+  sudo udevadm control --reload \
+    && sudo /usr/local/sbin/set-epp \
+    && log_ok "CPU power rule active: EPP $(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference) now, follows the power profile and the charger from here" \
+    || log_error "udev" "reload failed — run manually: sudo udevadm control --reload"
+}
+
+# Compressed swap in RAM (zram-tools), half of RAM, zstd. With no swap at all a
+# memory spike gets something OOM-killed instead of slowing down, and
+# systemd-oomd has no swap pressure to act on. Left alone where zram is already
+# set up another way (systemd-zram-generator, or a device someone made by hand).
+ZRAM_CONF=/etc/default/zramswap
+ZRAM_SETTINGS=(ALGO=zstd PERCENT=50 PRIORITY=100)
+
+install_zram() {
+  if pkg_installed systemd-zram-generator \
+    || { ! pkg_installed zram-tools && grep -q '^/dev/zram' /proc/swaps; }; then
+    log_skip "zram swap (already set up outside zram-tools)"; return
+  fi
+  if ! pkg_installed zram-tools; then
+    run_spin "installing zram-tools..." apt_get install -y zram-tools \
+      || { log_error "zram-tools" "apt install failed"; return; }
+  fi
+  # zramswap is the package's conffile: set the three keys in place rather than
+  # replacing it, so its comments and any other key survive package upgrades.
+  local kv changed=false
+  for kv in "${ZRAM_SETTINGS[@]}"; do
+    grep -qx "$kv" "$ZRAM_CONF" 2>/dev/null && continue
+    if grep -qE "^#?[[:space:]]*${kv%%=*}=" "$ZRAM_CONF"; then
+      sudo sed -i -E "s|^#?[[:space:]]*${kv%%=*}=.*|$kv|" "$ZRAM_CONF"
+    else
+      echo "$kv" | sudo tee -a "$ZRAM_CONF" >/dev/null
+    fi
+    changed=true
+  done
+  # SIZE, when set, wins over PERCENT.
+  grep -qE '^SIZE=' "$ZRAM_CONF" && { sudo sed -i -E 's/^SIZE=/#SIZE=/' "$ZRAM_CONF"; changed=true; }
+  if [[ "$changed" == true ]] || ! grep -q '^/dev/zram' /proc/swaps; then
+    sudo systemctl enable --quiet zramswap && sudo systemctl restart zramswap \
+      && log_ok "zram swap: $(awk '$1 ~ /zram/ { printf "%.1fG", $3/1048576 }' /proc/swaps) zstd in RAM" \
+      || log_error "zramswap" "could not start — see: journalctl -u zramswap -n 20"
+  else
+    log_skip "zram swap ($(awk '$1 ~ /zram/ { printf "%.1fG", $3/1048576 }' /proc/swaps) zstd)"
+  fi
+  install_root_file etc/sysctl.d/99-zram.conf 644
+  [[ $? == 0 ]] && { sudo sysctl -q -p /etc/sysctl.d/99-zram.conf \
+    || log_error "sysctl" "could not apply 99-zram.conf"; }
+}
+
 # ── niri desktop ───────────────────────────────────────────────────────────────
 # niri (a scrollable-tiling Wayland compositor) as a second session on the login
 # screen, beside GNOME. Opt-in: --setup asks, or --niri adds it on its own;
@@ -3904,6 +4018,36 @@ verify_niri() {
 
 # dpkg -C rather than `apt-get check` on purpose: it needs no sudo, and this
 # runs after the keepalive is dropped.
+# Only where --setup installs the rule (epp_rule_wanted): the files match the
+# repo, the profile watcher runs, and every core's EPP is what set-epp says the
+# profile and charger call for (--print shares its table rather than copying it).
+verify_amd_epp() {
+  local f
+  for f in "${EPP_FILES[@]}"; do
+    cmp -s "$DOTFILES/$f" "/$f" || { echo "/$f missing or out of date (run --setup)"; return 1; }
+  done
+  if pkg_installed power-profiles-daemon; then
+    systemctl is-active --quiet "$EPP_UNIT" || { echo "$EPP_UNIT not running (run --setup)"; return 1; }
+  fi
+  local want got; want=$(/usr/local/sbin/set-epp --print)
+  got=$(sort -u /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference)
+  [[ "$got" == "$want" ]] || { echo "EPP is ${got//$'\n'/,}, expected $want for the profile and charger"; return 1; }
+  local profile s power="on battery"; profile=$(powerprofilesctl get 2>/dev/null)
+  for s in /sys/class/power_supply/*; do
+    [[ "$(cat "$s/type")" == Mains && "$(cat "$s/online")" == 1 ]] && power="on the charger"
+  done
+  echo "EPP $want (${profile:-no profile daemon}, $power)"
+}
+
+verify_zram() {
+  local size; size=$(awk '$1 ~ /^\/dev\/zram/ { printf "%.1fG", $3/1048576 }' /proc/swaps)
+  [[ -n "$size" ]] || { echo 'no zram swap active (run --setup)'; return 1; }
+  cmp -s "$DOTFILES/etc/sysctl.d/99-zram.conf" /etc/sysctl.d/99-zram.conf \
+    || { echo '/etc/sysctl.d/99-zram.conf missing or out of date (run --setup)'; return 1; }
+  [[ "$(cat /proc/sys/vm/swappiness)" == 150 ]] || { echo "vm.swappiness is $(cat /proc/sys/vm/swappiness), expected 150"; return 1; }
+  echo "$size zram swap, swappiness 150"
+}
+
 verify_dpkg_state() {
   local out; out=$(dpkg -C 2>&1)
   [[ -z "$out" ]] || { echo 'dpkg reports half-configured or broken packages'; return 1; }
@@ -3932,6 +4076,8 @@ verify_install() {
   vcheck "symlinks"          verify_symlinks
   vcheck "serial ports"      verify_serial_access
   vcheck "ser2net"           verify_ser2net
+  epp_rule_wanted && vcheck "CPU power rule" verify_amd_epp
+  pkg_installed zram-tools && vcheck "zram swap" verify_zram
   [[ -x "$NIRI_BIN" ]] && vcheck "niri desktop" verify_niri
   vcheck "shell lint"        verify_shell_lint
   vcheck "dpkg state"        verify_dpkg_state
@@ -4025,6 +4171,10 @@ cmd_setup() {
   section "Serial ports"
   install_serial_access
   install_ser2net
+
+  section "Power and memory"
+  install_amd_epp
+  install_zram
 
   # Opt-in: the question above, or --niri on its own later.
   section "niri desktop"
@@ -4380,6 +4530,9 @@ usage() {
   echo -e "      ${SUBTEXT}FTDI latency rule    ${TEXT}udev sets every FTDI port's latency timer to 1 ms on plug-in${RESET}"
   echo -e "      ${SUBTEXT}ports                ${TEXT}list USB serial ports, -w to watch plug/unplug, share/unshare one on the network${RESET}"
   echo -e "      ${SUBTEXT}ser2net              ${TEXT}newest ser2net + gensio built from source into /usr/local, for ports share${RESET}"
+  echo -e "    ${TEXT}${BOLD}Power and memory${RESET}"
+  echo -e "      ${SUBTEXT}CPU power rule       ${TEXT}AMD laptops with an old power-profiles-daemon: CPU EPP follows the power profile; in Balanced, the charger${RESET}"
+  echo -e "      ${SUBTEXT}zram swap            ${TEXT}compressed swap in RAM, half its size, zstd (zram-tools), swappiness 150${RESET}"
   echo -e "    ${TEXT}${BOLD}Configuration${RESET}"
   echo -e "      ${SUBTEXT}Dotfile symlinks${RESET}"
   echo -e "      ${SUBTEXT}Theme                ${TEXT}pick Catppuccin (frappe/macchiato/mocha), Gruvbox Dark, or Dracula — kitty + bat + nvim + fzf + eza + tab bar + btop + zsh-syntax-highlighting + lazygit + delta + Powerlevel10k + yazi, and the niri session's bar, launcher, notifications and lock screen${RESET}"

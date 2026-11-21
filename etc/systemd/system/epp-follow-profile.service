@@ -1,0 +1,15 @@
+# Installed by install.sh --setup with 99-amd-epp.rules. Runs alongside
+# power-profiles-daemon (started and stopped with it) and re-applies the CPU's
+# EPP whenever the power profile changes.
+[Unit]
+Description=Set CPU EPP from the power profile
+After=power-profiles-daemon.service
+PartOf=power-profiles-daemon.service
+
+[Service]
+ExecStart=/usr/local/sbin/epp-follow-profile
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=power-profiles-daemon.service

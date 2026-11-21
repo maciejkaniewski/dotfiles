@@ -129,6 +129,13 @@ At the end of `--setup` you are asked for your git name and email, which go into
 | `ports` | Lists USB serial ports, watches them being plugged in and out, and shares one on the network (linked into `~/.local/bin`) |
 | ser2net | Newest ser2net and gensio built from source into `/usr/local`, with a disabled systemd unit, for `ports share`; also `./install.sh --ser2net` alone |
 
+**Power and memory**
+
+| What | Description |
+|---|---|
+| CPU power rule | AMD laptops only, and only while power-profiles-daemon is too old to drive `amd-pstate` (0.10 on Ubuntu 22.04). That daemon's profiles never touch the CPU's energy/performance preference (EPP), which the kernel leaves at `performance`, on battery too. `/usr/local/sbin/set-epp` sets EPP from the power profile: Performance → `performance` and Power saver → `power`, on the charger or not; in Balanced the charger decides, `balance_performance` on it and `balance_power` on battery. It runs when the charger is plugged in or out (`99-amd-epp.rules`), when the profile changes from the panel, Waybar or `powerprofilesctl` (`epp-follow-profile.service`, which watches the daemon over D-Bus), and after resume (a `system-sleep` hook). Where the daemon handles `amd-pstate` (0.20+, Ubuntu 24.04 on) it is skipped, and removed if an older setup left it behind |
+| zram swap | `zram-tools` with compressed swap in RAM: half its size, zstd, priority 100. `99-zram.conf` sets `vm.swappiness=150` and `vm.page-cluster=0`, tuned for swap that lives in RAM. Skipped where zram is already set up another way (`systemd-zram-generator`) |
+
 ## Machine-local files
 
 These files are **not** tracked in dotfiles — they are machine-specific and generated during setup:
