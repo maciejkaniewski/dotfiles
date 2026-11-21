@@ -3056,6 +3056,10 @@ install_niri_desktop() {
     link_parts "$entry" section_l src dst
     make_link "$src" "$dst"
   done
+  # systemd --user turns ~/.config/autostart into services only when it starts
+  # or reloads, and it outlives logging out: without this, an autostart file
+  # linked above (nm-applet's, turning it off) waits for a reboot.
+  systemctl --user daemon-reload 2>/dev/null
   write_niri_local
   fetch_wallpapers
   ensure_login_path
