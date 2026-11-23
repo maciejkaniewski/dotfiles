@@ -1707,11 +1707,15 @@ install_bw() {
       log_skip "bw $v"; return
     fi
   fi
-  local asset="bw-linux-${latest}.zip"
-  [[ "$ARCH_DEB" == arm64 ]] && asset="bw-linux-arm64-${latest}.zip"
-  local zip="$SCRIPT_TMPDIR/$asset"
+  # The commercial-license zips are bw-bit-linux-* from 2026.11.0 and were
+  # bw-linux-* before; the new name is tried first, the old one as a fallback.
+  local arch_part=""
+  [[ "$ARCH_DEB" == arm64 ]] && arch_part="-arm64"
+  local base="https://github.com/bitwarden/clients/releases/download/cli-v${latest}"
+  local zip="$SCRIPT_TMPDIR/bw-linux${arch_part}-${latest}.zip"
   run_spin "downloading bw $latest..." \
-    curl -fsSL "https://github.com/bitwarden/clients/releases/download/cli-v${latest}/${asset}" -o "$zip" \
+    bash -c "curl -fsSL '$base/bw-bit-linux${arch_part}-${latest}.zip' -o '$zip' \
+      || curl -fsSL '$base/bw-linux${arch_part}-${latest}.zip' -o '$zip'" \
     && log_ok "downloaded bw $latest" || { log_error "bw" "download failed"; return; }
   run_spin "installing bw $latest..." \
     bash -c "unzip -o '$zip' -d '$SCRIPT_TMPDIR' bw && sudo install -m755 '$SCRIPT_TMPDIR/bw' /usr/local/bin/bw" \
