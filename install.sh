@@ -2614,8 +2614,9 @@ install_firewall() {
 }
 
 # ── GRUB boot menu ───────────────────────────────────────────────────────────────
-# The boot menu in the theme's colours: the niri wallpaper's glows behind a
-# panel holding the menu, a countdown bar, and the keys to press.
+# The boot menu in the theme's colours: the menu straight on the niri
+# wallpaper's glows, an accent rail by the selected entry, a countdown bar,
+# and the keys to press.
 # grub/themes holds one GRUB theme per stub, written by grub/generate.py from
 # the repo's own theme files (and checked in real GRUB with grub/preview.sh).
 # GRUB_THEME points at one fixed folder under /boot — which GRUB can read even

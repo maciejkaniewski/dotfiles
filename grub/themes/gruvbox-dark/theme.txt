@@ -16,23 +16,24 @@ terminal-width: "100%"
 terminal-height: "100%"
 terminal-border: "0"
 
+# Wider than the bar by the item padding on each side, so the rail lines up
+# with the bar's left end.
 + boot_menu {
-  left = 50%-310
-  top = 50%-160
-  width = 620
-  height = 284
-  menu_pixmap_style = "menu_*.png"
+  left = 50%-306
+  top = 50%-150
+  width = 612
+  height = 234
   item_font = "Terminus Regular 20"
   selected_item_font = "Terminus Regular 20"
-  item_color = "#ebdbb2"
-  selected_item_color = "#ebdbb2"
+  item_color = "#928374"
+  selected_item_color = "#83a598"
   selected_item_pixmap_style = "select_*.png"
   icon_width = 28
   icon_height = 28
   item_icon_space = 16
-  item_height = 48
-  item_padding = 12
-  item_spacing = 8
+  item_height = 44
+  item_padding = 20
+  item_spacing = 6
   scrollbar = true
   scrollbar_width = 4
   scrollbar_thumb = "scroll_thumb_*.png"
@@ -41,7 +42,7 @@ terminal-border: "0"
 + progress_bar {
   id = "__timeout__"
   left = 50%-286
-  top = 50%+142
+  top = 50%+86
   width = 572
   height = 28
   bar_style = "progress_bar_*.png"
@@ -51,9 +52,9 @@ terminal-border: "0"
 
 + label {
   id = "__timeout__"
-  left = 50%-310
-  top = 50%+172
-  width = 620
+  left = 50%-286
+  top = 50%+118
+  width = 572
   align = "center"
   text = "Booting in %d s"
   font = "Terminus Regular 16"
@@ -61,7 +62,7 @@ terminal-border: "0"
 }
 
 + image {
-  left = 50%-232
+  left = 50%-198
   top = 100%-100
   file = "hints.png"
 }

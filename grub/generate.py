@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Generates the GRUB boot-menu themes in grub/themes, one per dotfiles theme.
 
-Each is the same layout in that theme's colours: the niri wallpaper's glows
-behind a rounded panel holding the menu, a countdown bar, and the keys to
+Each is the same layout in that theme's colours: the menu straight on the niri
+wallpaper's glows, with no panel, the selected entry in the accent colour
+beside an accent rail and the rest dimmed, a countdown bar, and the keys to
 press underneath, all in Terminus. Colours come from the repo's own theme files
 (kitty for base/text/surface/grey, gtk-3.0 for the accent, the niri wallpaper
 SVG for the glows), so the boot menu matches the desktop it starts.
@@ -42,18 +43,24 @@ FONTS = os.path.expanduser("~/.local/share/fonts")
 TERMINUS = "/usr/share/fonts/opentype/terminus/terminus-bold.otb"
 STUBS = ["frappe", "macchiato", "mocha", "gruvbox-dark", "dracula"]
 
-# Layout, in GRUB's pixels. The panel is the boot_menu component; GRUB draws
-# menu_*.png around it and lays the items out inside the corner insets.
-PANEL_W, PANEL_H, RADIUS = 620, 284, 22
-ITEM_H, ITEM_SP, ITEM_PAD, ICON, ICON_SP = 48, 8, 12, 28, 16
+# Layout, in GRUB's pixels. The menu is the boot_menu component, with no box
+# around it; the selected entry's box is only its left edge, the rail.
+MENU_W = 572
+ITEM_H, ITEM_SP, ITEM_PAD, ICON, ICON_SP = 44, 6, 20, 28, 16
+# The rail: its width, the clear gap after it, and its gap above and below.
+# GRUB draws the selected box at the item's padding and starts every entry's
+# icon after the box's left edge, so the gap is part of the image.
+RAIL_W, RAIL_GAP, RAIL_INSET = 4, 12, 8
 # GRUB 2.06 makes a progress bar at least 28 px tall whatever its height says,
 # so its images are 28 px with the 4 px stripe in the middle, the rest clear.
-BAR_W, BAR_H, BAR_STRIPE = PANEL_W - 2 * 24, 28, 4
-# GRUB fits (height + spacing - 2*padding - the box's corner insets) / (item
-# height + spacing) entries, so 4 need 284. More than fit scroll, with the bar.
-PANEL_TOP = -160          # panel's top edge, relative to 50%
-BAR_TOP = 142             # countdown bar, under the panel (GRUB draws the panel over anything inside it)
-LABEL_TOP = 172           # "Booting in %d s", relative to 50%
+# The splash (plymouth/generate.py) takes the same width.
+BAR_W, BAR_H, BAR_STRIPE = MENU_W, 28, 4
+# GRUB fits (height + spacing - 2*padding) / (item height + spacing) entries,
+# so 4 need 234. More than fit scroll, with the bar.
+MENU_H = 234
+MENU_TOP = -150           # menu's top edge, relative to 50%
+BAR_TOP = 86              # countdown bar, under the menu (GRUB draws the menu over anything inside it)
+LABEL_TOP = 118           # "Booting in %d s", relative to 50%
 HINTS_FROM_BOTTOM = 100   # key hints image, relative to 100%
 BG_W, BG_H = 1920, 1200   # background, stretched to the screen
 HINTS = [("↑↓", "select"), ("enter", "boot"), ("e", "edit"), ("c", "console")]
@@ -111,37 +118,20 @@ def rounded(w, h, r, fill, outline=None, width=0, scale=4):
     return big.resize((w, h), Image.LANCZOS)
 
 
-def nine_slice(img, r, prefix, out):
-    """GRUB's styled box: corners r x r, 1-pixel edges and centre."""
-    w, h = img.size
-    parts = {"nw": (0, 0, r, r), "n": (r, 0, r + 1, r), "ne": (w - r, 0, w, r),
-             "w": (0, r, r, r + 1), "c": (r, r, r + 1, r + 1), "e": (w - r, r, w, r + 1),
-             "sw": (0, h - r, r, h), "s": (r, h - r, r + 1, h), "se": (w - r, h - r, w, h)}
-    for name, box in parts.items():
-        save(img.crop(box), f"{out}/{prefix}_{name}.png")
-
-
 def hints(p):
-    """The key hints, in Terminus 16 like the countdown above them. Its text is
-    drawn at its own size (a bitmap font has no other), the keycap outlines
-    4x and scaled down for smooth corners."""
+    """The key hints, in Terminus 16 like the countdown above them, drawn at
+    its own size (a bitmap font has no other): each key in the text colour,
+    what it does dimmed."""
     font = ImageFont.truetype(TERMINUS, 16)
     probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-    cells = [(k, v, probe.textlength(k, font=font) + 20, probe.textlength(v, font=font)) for k, v in HINTS]
-    gap, h = 36, 32
+    cells = [(k, v, probe.textlength(k, font=font), probe.textlength(v, font=font)) for k, v in HINTS]
+    gap, h = 40, 24
     w = int(sum(kw + 8 + vw for _, _, kw, vw in cells) + gap * (len(cells) - 1)) + 4
-    s = 4
-    big = Image.new("RGBA", (w * s, h * s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(big)
-    x = 2
-    for k, v, kw, vw in cells:
-        d.rounded_rectangle([x * s, 1 * s, (x + kw) * s, (h - 1) * s], radius=7 * s, outline=rgba(p["dim"]), width=2 * s)
-        x += kw + 8 + vw + gap
-    img = big.resize((w, h), Image.LANCZOS)
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     x = 2
     for k, v, kw, vw in cells:
-        d.text((round(x + kw / 2), h // 2), k, font=font, fill=rgba(p["text"]), anchor="mm")
+        d.text((round(x), h // 2), k, font=font, fill=rgba(p["text"]), anchor="lm")
         d.text((round(x + kw + 8), h // 2), v, font=font, fill=rgba(p["dim"]), anchor="lm")
         x += kw + 8 + vw + gap
     return img
@@ -186,16 +176,17 @@ terminal-width: "100%"
 terminal-height: "100%"
 terminal-border: "0"
 
+# Wider than the bar by the item padding on each side, so the rail lines up
+# with the bar's left end.
 + boot_menu {{
-  left = 50%-{half_w}
-  top = 50%{panel_top}
-  width = {panel_w}
-  height = {panel_h}
-  menu_pixmap_style = "menu_*.png"
+  left = 50%-{box_half}
+  top = 50%{menu_top}
+  width = {box_w}
+  height = {menu_h}
   item_font = "Terminus Regular 20"
   selected_item_font = "Terminus Regular 20"
-  item_color = "{text}"
-  selected_item_color = "{text}"
+  item_color = "{dim}"
+  selected_item_color = "{acc}"
   selected_item_pixmap_style = "select_*.png"
   icon_width = {icon}
   icon_height = {icon}
@@ -223,7 +214,7 @@ terminal-border: "0"
   id = "__timeout__"
   left = 50%-{half_w}
   top = 50%+{label_top}
-  width = {panel_w}
+  width = {menu_w}
   align = "center"
   text = "Booting in %d s"
   font = "Terminus Regular 16"
@@ -244,15 +235,13 @@ def generate(stub):
     shutil.rmtree(out, ignore_errors=True)
     os.makedirs(f"{out}/icons")
     save(background(stub).convert("RGB"), f"{out}/background.png")
-    # Opaque: on real firmware GRUB blends a translucent panel pixel by pixel on
-    # every key press, which lagged and flashed black on a ThinkPad (QEMU's
-    # virtual display hides it). Only the rounded corners keep their alpha.
-    panel = rounded(2 * RADIUS + 1, 2 * RADIUS + 1, RADIUS, rgba(p["base"]), rgba(p["surf"]), 2)
-    nine_slice(panel, RADIUS, "menu", out)
-    sel = rounded(2 * 10 + 1, ITEM_H, 10, rgba(p["surf"]))
-    save(sel.crop((0, 0, 10, ITEM_H)), f"{out}/select_w.png")
-    save(sel.crop((10, 0, 11, ITEM_H)), f"{out}/select_c.png")
-    save(sel.crop((11, 0, 21, ITEM_H)), f"{out}/select_e.png")
+    # The selected entry's box is its left edge alone: no centre or other
+    # edges, so GRUB blends nothing across the row. On real firmware it blends
+    # translucent images pixel by pixel on every key press, which lagged and
+    # flashed black on a ThinkPad with a translucent panel (QEMU hides it).
+    rail = Image.new("RGBA", (RAIL_W + RAIL_GAP, ITEM_H), (0, 0, 0, 0))
+    rail.alpha_composite(rounded(RAIL_W, ITEM_H - 2 * RAIL_INSET, 2, rgba(p["acc"])), (0, RAIL_INSET))
+    save(rail, f"{out}/select_w.png")
     # The countdown bar as images: GRUB 2.06 draws a progress_bar's plain
     # fg_color/bg_color at about a fifth of their opacity, seen in QEMU.
     for name, col in (("progress_bar", p["surf"]), ("progress_highlight", p["acc"])):
@@ -267,14 +256,17 @@ def generate(stub):
     save(thumb.crop((0, 3, 4, 5)), f"{out}/scroll_thumb_s.png")
     h = hints(p)
     save(h, f"{out}/hints.png")
+    # Dimmed like the entries: GRUB shows the same icon whether or not its
+    # entry is selected.
     for f in sorted(os.listdir(f"{GRUB}/icons")):
         if f.endswith(".png"):
-            save(recolour(f"{GRUB}/icons/{f}", p["text"]), f"{out}/icons/{f}")
+            save(recolour(f"{GRUB}/icons/{f}", p["dim"]), f"{out}/icons/{f}")
     for cls, char in GLYPH_ICONS.items():
-        save(glyph_icon(char, p["text"]), f"{out}/icons/{cls}.png")
+        save(glyph_icon(char, p["dim"]), f"{out}/icons/{cls}.png")
     name = {"gruvbox-dark": "Gruvbox Dark", "dracula": "Dracula"}.get(stub, f"Catppuccin {stub.capitalize()}")
     open(f"{out}/theme.txt", "w").write(THEME_TXT.format(
-        name=name, half_w=PANEL_W // 2, panel_top=f"{PANEL_TOP:+d}", panel_w=PANEL_W, panel_h=PANEL_H,
+        name=name, half_w=MENU_W // 2, menu_top=f"{MENU_TOP:+d}", menu_w=MENU_W, menu_h=MENU_H,
+        box_half=MENU_W // 2 + ITEM_PAD, box_w=MENU_W + 2 * ITEM_PAD,
         icon=ICON, icon_sp=ICON_SP, item_h=ITEM_H, item_pad=ITEM_PAD, item_sp=ITEM_SP,
         bar_half=BAR_W // 2, bar_top=BAR_TOP, bar_w=BAR_W, bar_h=BAR_H,
         label_top=LABEL_TOP, hints_half=h.width // 2, hints_bottom=HINTS_FROM_BOTTOM, **p))
@@ -282,37 +274,27 @@ def generate(stub):
 
 
 # ── Preview: GRUB's layout of the generated files, approximated with Pillow ──
-ENTRIES = [("Ubuntu", "ubuntu"), ("Advanced options for Ubuntu", None),
-           ("Windows Boot Manager (on /dev/nvme0n1p1)", "windows"), ("UEFI Firmware Settings", None)]
+ENTRIES = [("Ubuntu", "ubuntu"), ("Advanced options for Ubuntu", "submenu"),
+           ("Windows Boot Manager (on /dev/nvme0n1p1)", "windows"), ("UEFI Firmware Settings", "efi")]
 
 
 def preview(stub, p, W, H, path):
     t = f"{GRUB}/themes/{stub}"
     img = Image.open(f"{t}/background.png").convert("RGBA").resize((W, H), Image.BILINEAR)
-    px, py = W // 2 - PANEL_W // 2, H // 2 + PANEL_TOP
-    part = lambda n: Image.open(f"{t}/menu_{n}.png")
-    r = RADIUS
-    box = Image.new("RGBA", (PANEL_W, PANEL_H), (0, 0, 0, 0))
-    box.paste(part("nw"), (0, 0)); box.paste(part("ne"), (PANEL_W - r, 0))
-    box.paste(part("sw"), (0, PANEL_H - r)); box.paste(part("se"), (PANEL_W - r, PANEL_H - r))
-    box.paste(part("n").resize((PANEL_W - 2 * r, r)), (r, 0)); box.paste(part("s").resize((PANEL_W - 2 * r, r)), (r, PANEL_H - r))
-    box.paste(part("w").resize((r, PANEL_H - 2 * r)), (0, r)); box.paste(part("e").resize((r, PANEL_H - 2 * r)), (PANEL_W - r, r))
-    box.paste(part("c").resize((PANEL_W - 2 * r, PANEL_H - 2 * r)), (r, r))
-    img.alpha_composite(box, (px, py))
+    mx, my = W // 2 - MENU_W // 2, H // 2 + MENU_TOP
     d = ImageDraw.Draw(img)
     font = ImageFont.truetype(TERMINUS, 20)
     small = ImageFont.truetype(TERMINUS, 16)
-    cx, cw = px + r, PANEL_W - 2 * r
-    sw, sc, se = (Image.open(f"{t}/select_{s}.png") for s in "wce")
+    rail = Image.open(f"{t}/select_w.png")
     for i, (label, cls) in enumerate(ENTRIES):
-        y = py + r + i * (ITEM_H + ITEM_SP)
+        y = my + ITEM_PAD + i * (ITEM_H + ITEM_SP)
         if i == 0:
-            img.alpha_composite(sw, (cx, y)); img.alpha_composite(sc.resize((cw - sw.width - se.width, ITEM_H)), (cx + sw.width, y))
-            img.alpha_composite(se, (cx + cw - se.width, y))
-        if cls:
-            img.alpha_composite(Image.open(f"{t}/icons/{cls}.png").convert("RGBA").resize((ICON, ICON), Image.LANCZOS),
-                                (cx + ITEM_PAD, y + (ITEM_H - ICON) // 2))
-        d.text((cx + ITEM_PAD + ICON + ICON_SP, y + ITEM_H // 2), label, font=font, fill=rgba(p["text"]), anchor="lm")
+            img.alpha_composite(rail, (mx, y))
+        ix = mx + rail.width
+        img.alpha_composite(Image.open(f"{t}/icons/{cls}.png").convert("RGBA").resize((ICON, ICON), Image.LANCZOS),
+                            (ix, y + (ITEM_H - ICON) // 2))
+        d.text((ix + ICON + ICON_SP, y + ITEM_H // 2), label, font=font,
+               fill=rgba(p["acc"] if i == 0 else p["dim"]), anchor="lm")
     bx, by = W // 2 - BAR_W // 2, H // 2 + BAR_TOP
     sy = by + (BAR_H - BAR_STRIPE) // 2
     d.rectangle([bx, sy, bx + BAR_W, sy + BAR_STRIPE - 1], fill=rgba(p["surf"]))
