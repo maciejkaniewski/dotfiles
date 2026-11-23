@@ -2981,11 +2981,13 @@ verify_login_background() {
 # once it is installed, --setup keeps it at the versions file's pins without
 # asking. niri and xwayland-satellite aren't packaged
 # for Ubuntu 24.04, and its Waybar (0.9.24) predates the niri modules, so all
-# three are built from source; the rest comes from apt.
+# three are built from source; so is fuzzel, as 24.04's (1.9.2) lacks
+# --hide-prompt, which the menus use. The rest comes from apt.
 NIRI_BIN=/usr/local/bin/niri
 NIRI_BUILD_DEPS=(gcc clang libudev-dev libgbm-dev libxkbcommon-dev libegl1-mesa-dev libwayland-dev
   libinput-dev libdbus-1-dev libsystemd-dev libseat-dev libpipewire-0.3-dev libpango1.0-dev
   libdisplay-info-dev libxcb1-dev libxcb-cursor-dev)
+FUZZEL_BUILD_DEPS=(scdoc libtllist-dev libpng-dev)
 WAYBAR_BUILD_DEPS=(libgtkmm-3.0-dev libjsoncpp-dev libfmt-dev libspdlog-dev libgtk-layer-shell-dev
   wayland-protocols libdbusmenu-gtk3-dev libupower-glib-dev libpulse-dev libnl-3-dev libnl-genl-3-dev
   libxkbregistry-dev libevdev-dev libpam0g-dev libplayerctl-dev)
@@ -2997,7 +2999,7 @@ WAYBAR_BUILD_DEPS=(libgtkmm-3.0-dev libjsoncpp-dev libfmt-dev libspdlog-dev libg
 # .local/bin/sound-output; wdisplays arranges screens; Python's GTK 4 and
 # libadwaita draw night light's warmth slider (the night light itself is from
 # crates.io).
-NIRI_SESSION_PKGS=(xwayland fuzzel mako-notifier swaylock swayidle swaybg policykit-1-gnome
+NIRI_SESSION_PKGS=(xwayland mako-notifier swaylock swayidle swaybg policykit-1-gnome
   playerctl cliphist wl-clipboard pulsemixer papirus-icon-theme thunar python3-pil
   pulseaudio-utils alsa-utils libglib2.0-bin wdisplays python3-gi gir1.2-gtk-4.0 gir1.2-adw-1)
 
@@ -3012,8 +3014,8 @@ NIRI_SESSION_PKGS=(xwayland fuzzel mako-notifier swaylock swayidle swaybg policy
 # pkg-config directories it needs, so nothing links a library from
 # /opt/niri-deps that it couldn't find again at run time.
 NIRI_DEPS=/opt/niri-deps
-NIRI_OLD_NOT_IN_APT=(libinput-dev libdisplay-info-dev fuzzel cliphist)
-NIRI_OLD_BUILD_DEPS=(libmtdev-dev scdoc libtllist-dev libpng-dev libffi-dev libexpat1-dev libxml2-dev
+NIRI_OLD_NOT_IN_APT=(libinput-dev libdisplay-info-dev cliphist)
+NIRI_OLD_BUILD_DEPS=(libmtdev-dev libffi-dev libexpat1-dev libxml2-dev
   libdrm-dev libxcvt-dev libepoxy-dev libxfont-dev libxkbfile-dev xtrans-dev libxshmfence-dev
   libtirpc-dev x11proto-dev libbsd-dev mesa-common-dev)
 niri_old_ubuntu() { version_lt "$(. /etc/os-release && echo "$VERSION_ID")" 24.04; }
@@ -3314,9 +3316,9 @@ swayidle_build_install() {
     && sudo install -m 755 build/swayidle /usr/local/bin/swayidle
 }
 
-# fuzzel needs pixman 0.46 (22.04 has 0.40): static, in its own prefix so no
-# other build links it. fcft, its font library, is newer than 22.04's too, so
-# it is built in as a subproject.
+# fuzzel needs pixman 0.46 (22.04 has 0.40, 24.04 0.42): static, in its own
+# prefix so no other build links it. fcft, its font library, is newer than
+# 22.04's too, so it is built in as a subproject.
 pixman_build_install() {
   meson setup build --prefix="$NIRI_DEPS/pixman" --libdir=lib --buildtype=release -Ddefault_library=static \
       -Dtests=disabled -Ddemos=disabled -Dgtk=disabled -Dlibpng=disabled \
@@ -3384,9 +3386,15 @@ install_niri_old_session() {
       "$NIRI_DEPS/xwayland/lib/libwayland-client.so.0" \
     && install_old_component xwayland "$fd/xorg/xserver.git" xwayland- xwayland_build_install /usr/local/bin/Xwayland
   install_old_component swayidle https://github.com/swaywm/swayidle.git v swayidle_build_install /usr/local/bin/swayidle
-  install_old_component pixman "$fd/pixman/pixman.git" pixman- pixman_build_install "$NIRI_DEPS/pixman/lib/libpixman-1.a" \
-    && install_old_component fuzzel https://codeberg.org/dnkl/fuzzel.git "" fuzzel_build_install /usr/local/bin/fuzzel
   install_cliphist
+}
+
+# fuzzel on every release (see NIRI_BIN's comment). apt's, where it is still
+# installed from before, stays behind /usr/local/bin's on PATH.
+install_fuzzel() {
+  install_old_component pixman https://gitlab.freedesktop.org/pixman/pixman.git pixman- pixman_build_install \
+      "$NIRI_DEPS/pixman/lib/libpixman-1.a" \
+    && install_old_component fuzzel https://codeberg.org/dnkl/fuzzel.git "" fuzzel_build_install /usr/local/bin/fuzzel
 }
 
 # Newest stable version of crate $1 on crates.io (its API wants a User-Agent).
@@ -3627,7 +3635,7 @@ snap_theme_installs_off() {
 }
 
 install_niri_desktop() {
-  local missing=() dep crate pkgs=("${NIRI_BUILD_DEPS[@]}" "${WAYBAR_BUILD_DEPS[@]}" "${NIRI_SESSION_PKGS[@]}")
+  local missing=() dep crate pkgs=("${NIRI_BUILD_DEPS[@]}" "${FUZZEL_BUILD_DEPS[@]}" "${WAYBAR_BUILD_DEPS[@]}" "${NIRI_SESSION_PKGS[@]}")
   niri_old_ubuntu && pkgs+=("${NIRI_OLD_BUILD_DEPS[@]}")
   for dep in "${pkgs[@]}"; do
     # On 22.04, built from source instead (install_niri_old_*).
@@ -3650,6 +3658,7 @@ install_niri_desktop() {
   install_niri_component niri niri-wm/niri v niri_build_install || return 1
   install_niri_component xwayland-satellite Supreeeme/xwayland-satellite v xws_build_install
   niri_old_ubuntu && install_niri_old_session
+  install_fuzzel
   install_niri_component waybar Alexays/Waybar "" waybar_build_install
   install_niri_component swaylock-effects jirutka/swaylock-effects v swaylock_effects_build_install
   install_adw_gtk3
@@ -4453,8 +4462,10 @@ verify_niri() {
   for key in "${NIRI_CRATES[@]}"; do
     command_exists "$key" || { echo "$key missing (run --niri)"; return 1; }
   done
+  [[ -f "$(old_stamp fuzzel)" ]] || { echo "fuzzel not built from source (run --niri)"; return 1; }
+  versions+="fuzzel $(<"$(old_stamp fuzzel)"), "
   if niri_old_ubuntu; then
-    for key in wayland-protocols libinput libdisplay-info libwayland xwayland swayidle pixman fuzzel; do
+    for key in wayland-protocols libinput libdisplay-info libwayland xwayland swayidle pixman; do
       [[ -f "$(old_stamp "$key")" ]] || { echo "$key missing (run --niri)"; return 1; }
     done
     ldd "$NIRI_BIN" | grep -q "$NIRI_DEPS/lib/libinput" \

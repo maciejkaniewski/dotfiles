@@ -28,6 +28,9 @@ xwayland-satellite=0.8.3
 waybar=0.16.0
 swaylock-effects=1.7.0.0  # lock screen with a clock, patched for a second time zone; no releases/latest, so keep a pin
 adw-gtk3=6.5              # GTK 3 theme in the theme's colours; a download, not a build
+fuzzel=1.15.0             # apt's is too old for --hide-prompt; no "latest" here
+pixman=0.46.4             # for fuzzel, static
+fcft=3.3.3                # fuzzel's font library, built in
 
 # Ubuntu 22.04 only: what it lacks or has too old for the niri desktop, built
 # from source into /opt/niri-deps or /usr/local/bin (see NIRI_DEPS in
@@ -38,7 +41,4 @@ libdisplay-info=0.2.0
 libwayland=1.23.1      # for Xwayland only
 xwayland=23.1.2        # xwayland-satellite needs 23.1
 swayidle=1.9.1
-pixman=0.46.4          # for fuzzel
-fuzzel=1.15.0
-fcft=3.3.3             # fuzzel's font library, built in
 cliphist=0.7.0
