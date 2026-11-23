@@ -62,24 +62,19 @@ SCRIPT = """\
 Window.SetBackgroundTopColor({base_f});
 Window.SetBackgroundBottomColor({base_f});
 
+# Plymouth puts every screen on one canvas the size of the largest, each
+# centred in it, so the canvas's centre is every screen's centre. Window.GetX()
+# without an index is the smallest screen's offset in it: added in, it moved
+# everything right and down whenever screens of two sizes were lit.
 W = Window.GetWidth();
 H = Window.GetHeight();
-X = Window.GetX();
-Y = Window.GetY();
 
-bg_w = W; bg_h = H; bg_x = X; bg_y = Y;
-for (i = 0; i < 8 && Window.GetWidth(i); i++) {{
-  if (Window.GetWidth(i) * Window.GetHeight(i) > bg_w * bg_h) {{
-    bg_w = Window.GetWidth(i); bg_h = Window.GetHeight(i);
-    bg_x = Window.GetX(i); bg_y = Window.GetY(i);
-  }}
-}}
-background = Sprite(Image("background.png").Scale(bg_w, bg_h));
-background.SetPosition(bg_x, bg_y, -100);
+background = Sprite(Image("background.png").Scale(W, H));
+background.SetPosition(0, 0, -100);
 
 bar_w = Math.Min({bar_w}, W - 64);
-bar_x = X + Math.Int((W - bar_w) / 2);
-bar_y = Y + Math.Int(H / 2);
+bar_x = Math.Int((W - bar_w) / 2);
+bar_y = Math.Int(H / 2);
 
 track = Sprite(Image("bar-track.png").Scale(bar_w, {stripe}));
 track.SetPosition(bar_x, bar_y, 1);
@@ -92,7 +87,7 @@ else if (mode == "reboot")
 else
   label_image = Image("label-boot.png");
 label = Sprite(label_image);
-label.SetPosition(X + Math.Int((W - label_image.GetWidth()) / 2),
+label.SetPosition(Math.Int((W - label_image.GetWidth()) / 2),
                   bar_y + {label_gap} - Math.Int(label_image.GetHeight() / 2), 3);
 
 # A short piece of the bar slides to and fro until the splash closes: how
@@ -123,7 +118,7 @@ for (i = 0; i < {max_bullets}; i++) {{
 fun show_bullets(n) {{
   n = Math.Min(n, {max_bullets});
   step = 16;
-  x0 = global.X + Math.Int((global.W - (n - 1) * step - global.bullet_image.GetWidth()) / 2);
+  x0 = Math.Int((global.W - (n - 1) * step - global.bullet_image.GetWidth()) / 2);
   for (i = 0; i < {max_bullets}; i++) {{
     global.bullets[i].SetPosition(x0 + i * step, global.bar_y + {label_gap} + 24, 3);
     if (i < n) global.bullets[i].SetOpacity(1);
@@ -134,7 +129,7 @@ fun show_bullets(n) {{
 fun show_question(text, n) {{
   image = Image.Text(text, {text_f}, 1, "Ubuntu Mono 13");
   global.question.SetImage(image);
-  global.question.SetPosition(global.X + Math.Int((global.W - image.GetWidth()) / 2),
+  global.question.SetPosition(Math.Int((global.W - image.GetWidth()) / 2),
                               global.bar_y + {label_gap} - Math.Int(image.GetHeight() / 2), 3);
   global.question.SetOpacity(1);
   global.label.SetOpacity(0);
@@ -164,7 +159,7 @@ message = Sprite();
 fun display_message(text) {{
   image = Image.Text(text, {dim_f}, 1, "Ubuntu Mono 11");
   global.message.SetImage(image);
-  global.message.SetPosition(global.X + Math.Int((global.W - image.GetWidth()) / 2),
+  global.message.SetPosition(Math.Int((global.W - image.GetWidth()) / 2),
                              global.bar_y + {label_gap} + 56, 3);
   global.message.SetOpacity(1);
 }}
