@@ -2630,6 +2630,9 @@ GRUB_FONT=/usr/share/fonts/opentype/terminus/terminus-bold.otb
 
 grub_in_use() { [[ -f /etc/default/grub && -d /boot/grub ]] && command_exists update-grub; }
 grub_theme_managed() { grep -qxF "$GRUB_THEME_LINE" /etc/default/grub 2>/dev/null; }
+# grub.cfg can be root-only (mode 600), so it's read through sudo where that
+# needs no password. Prints nothing when it can't be read.
+grub_cfg() { cat /boot/grub/grub.cfg 2>/dev/null || sudo -n cat /boot/grub/grub.cfg 2>/dev/null; }
 
 # The stub of the theme in ~/.config/theme/current, named as apply_theme names it.
 theme_stub() {
@@ -2742,7 +2745,7 @@ install_grub_theme() {
   modes=$(grub_gfx_modes)
   # grub.cfg names each font file it loads, so new fonts need it regenerated.
   if [[ -f "$GRUB_THEME_DIR/terminus-20.pf2" ]] \
-    && ! grep -q "loadfont .*themes/dotfiles/terminus-20.pf2" /boot/grub/grub.cfg 2>/dev/null; then
+    && ! grub_cfg | grep -q "loadfont .*themes/dotfiles/terminus-20.pf2"; then
     changed=true
   fi
   [[ -e /etc/default/grub.dotfiles-bak ]] || sudo cp /etc/default/grub /etc/default/grub.dotfiles-bak
@@ -4511,15 +4514,18 @@ verify_logs_firewall() {
 # Only where --setup took over GRUB_THEME: grub.cfg loads the fixed folder, and
 # the folder holds the theme ~/.config/theme/current names.
 verify_grub_theme() {
-  grep -qE "^[[:space:]]*set theme=.*grub/themes/dotfiles/theme\.txt" /boot/grub/grub.cfg 2>/dev/null \
-    || { echo "grub.cfg doesn't load $GRUB_THEME_DIR (run: sudo update-grub)"; return 1; }
   local stub; stub=$(theme_stub); stub=${stub:-mocha}
   diff -rq -x '*.pf2' "$DOTFILES/grub/themes/$stub" "$GRUB_THEME_DIR" &>/dev/null \
     || { echo "the boot menu isn't in $stub (run --theme)"; return 1; }
+  local cfg; cfg=$(grub_cfg)
+  # Root-only and no sudo at hand: a missing file isn't the same as a wrong one.
+  [[ -n "$cfg" ]] || { echo "boot menu in $stub (grub.cfg is root-only: rerun after sudo -v to check it)"; return 0; }
+  grep -qE "^[[:space:]]*set theme=.*grub/themes/dotfiles/theme\.txt" <<<"$cfg" \
+    || { echo "grub.cfg doesn't load $GRUB_THEME_DIR (run: sudo update-grub)"; return 1; }
   local fonts="Terminus"
-  grep -qE "^[[:space:]]*loadfont .*grub/themes/dotfiles/terminus-20\.pf2" /boot/grub/grub.cfg 2>/dev/null \
+  grep -qE "^[[:space:]]*loadfont .*grub/themes/dotfiles/terminus-20\.pf2" <<<"$cfg" \
     || fonts="GRUB's Unifont (Terminus not loaded: run --setup)"
-  if grep -q "^submenu 'Advanced options" /boot/grub/grub.cfg && ! grep -q "^submenu 'Advanced options.*--class submenu" /boot/grub/grub.cfg; then
+  if grep -q "^submenu 'Advanced options" <<<"$cfg" && ! grep -q "^submenu 'Advanced options.*--class submenu" <<<"$cfg"; then
     echo "the Advanced options entry has no icon class (run --setup)"; return 1
   fi
   echo "boot menu in $stub, $fonts, icons on every entry"
