@@ -2987,7 +2987,8 @@ verify_login_background() {
 # asking. niri and xwayland-satellite aren't packaged
 # for Ubuntu 24.04, and its Waybar (0.9.24) predates the niri modules, so all
 # three are built from source; so is fuzzel, as 24.04's (1.9.2) lacks
-# --hide-prompt, which the menus use. The rest comes from apt.
+# --hide-prompt and --match-nth, which the power menu uses. The rest comes
+# from apt.
 NIRI_BIN=/usr/local/bin/niri
 NIRI_BUILD_DEPS=(gcc clang libudev-dev libgbm-dev libxkbcommon-dev libegl1-mesa-dev libwayland-dev
   libinput-dev libdbus-1-dev libsystemd-dev libseat-dev libpipewire-0.3-dev libpango1.0-dev

@@ -1,8 +1,25 @@
 #!/bin/sh
 # power-menu: lock, suspend, log out, reboot or shut down, picked in fuzzel.
 # The niri session runs it on Ctrl+Alt+Delete and from Waybar's ⏻ button.
-choice=$(printf '%s\n' "󰌾  Lock" "󰤄  Suspend" "󰍃  Log out" "󰜉  Reboot" "󰐥  Shut down" \
-    | fuzzel --dmenu --hide-prompt --lines 5 --width 18) || exit 0
+#
+# Five entries need no search, so the search line is hidden. fuzzel still takes
+# what's typed and can't be told not to filter, and a stray key emptied the list
+# with nothing to show why. So it matches against a hidden first column instead:
+# every printable character and the Polish letters, 64 times over. In fzf mode
+# what's typed only has to appear in it in order, which it always does, so
+# typing leaves the list as it is. Shown and printed is the second column.
+keys=$(awk 'BEGIN { for (i = 32; i < 127; i++) printf "%c", i }')ąćęłńóśźżĄĆĘŁŃÓŚŹŻ
+any=$keys
+for _ in 1 2 3 4 5 6; do any=$any$any; done
+choice=$(printf "%s\t%s\n" \
+        "$any" "󰌾  Lock" \
+        "$any" "󰤄  Suspend" \
+        "$any" "󰍃  Log out" \
+        "$any" "󰜉  Reboot" \
+        "$any" "󰐥  Shut down" \
+    | fuzzel --dmenu --hide-prompt --lines 5 --width 18 \
+        --match-nth 1 --with-nth 2 --accept-nth 2 \
+        --match-mode fzf --only-match) || exit 0
 case "$choice" in
     *Lock)        lock-screen ;;
     *Suspend)     systemctl suspend ;;   # swayidle locks the screen first
