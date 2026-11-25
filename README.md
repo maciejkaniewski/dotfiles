@@ -69,4 +69,4 @@ Then log out and back in, so the session starts with zsh, and open kitty. Near t
 
 ## License
 
-[MIT](LICENSE) — fork it, copy from it, change it. The theme files under `.config/` (Catppuccin, Gruvbox, Dracula) come from their upstream projects, which are MIT-licensed too.
+[MIT](LICENSE) — fork it, copy from it, change it. The theme files under `.config/` and `.local/share/` (Catppuccin, Gruvbox, Dracula) come from their upstream projects, which are MIT-licensed too, except Gruvbox's Text Editor scheme: LGPL 2.1, as its header says.

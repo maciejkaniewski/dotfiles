@@ -495,6 +495,10 @@ LINKS=(
   "Utilities|$DOTFILES/.config/yazi/keymap.toml:$HOME/.config/yazi/keymap.toml"
   "Utilities|$DOTFILES/.config/yazi/plugins/smart-enter.yazi:$HOME/.config/yazi/plugins/smart-enter.yazi"
   "Utilities|$DOTFILES/.config/yazi/flavors:$HOME/.config/yazi/flavors"
+  # Text Editor's colour schemes, one per theme: gedit on 22.04 reads
+  # GtkSourceView 4's folder, GNOME Text Editor on 24.04 GtkSourceView 5's.
+  "Text Editor|$DOTFILES/.local/share/gtksourceview-4/styles:$HOME/.local/share/gtksourceview-4/styles"
+  "Text Editor|$DOTFILES/.local/share/gtksourceview-4/styles:$HOME/.local/share/gtksourceview-5/styles"
 )
 
 # Splits a "Section|src:dst" entry into its three parts.
@@ -3976,6 +3980,19 @@ apply_theme() {
         && log_ok "${SUBTEXT}icon theme → $icons${RESET}"
     fi
     write_gtk3_settings
+
+    # Text Editor draws the text itself with a GtkSourceView colour scheme,
+    # which the GTK theme doesn't reach. The repo's schemes take the variants'
+    # names; whichever editor this release has gets the setting, and an open
+    # window switches at once.
+    local editor_key
+    for editor_key in "org.gnome.gedit.preferences.editor scheme" "org.gnome.TextEditor style-scheme"; do
+      # shellcheck disable=SC2086 # schema and key, split on purpose
+      gsettings writable $editor_key &>/dev/null || continue
+      # shellcheck disable=SC2086
+      gsettings set $editor_key "$stub" \
+        && log_ok "${SUBTEXT}Text Editor colours → ${label}${RESET}"
+    done
   fi
 
   # niri reloads its own config; open kitty windows, a running Waybar and mako

@@ -93,21 +93,25 @@ dotfiles/
 │               └── zen-mode.lua
 ├── .gitconfig
 ├── .local/
-│   └── bin/
-│       ├── git-credential-bw          # git credential helper — HTTPS logins from the Bitwarden vault
-│       ├── ports                      # list / watch USB serial ports, share one on the network
-│       ├── column-width               # niri: Super+= / Super+- widen or narrow the column by 10%, capped at full width
-│       ├── battery-notify             # niri: low-battery warnings, power-saver at 20%
-│       ├── lock-screen                # niri: swaylock-effects, clock and second time zone over the wallpaper (PNG-cached)
-│       ├── osd                        # niri: volume / brightness keys, with a level pop-up
-│       ├── power-menu                 # niri: lock / suspend / log out / reboot / shut down, in fuzzel
-│       ├── waybar-calendar            # niri: Waybar's date and time, with a Monday-first calendar tooltip
-│       ├── wallpaper                  # niri: cycle the theme's wallpapers (Super+Alt+W); --fetch blurs the community ones
-│       ├── waybar-cast                # niri: Waybar's red pill while the screen is shared or recorded
-│       ├── waybar-io                  # niri: Waybar's disk readout, network speed in its tooltip
-│       ├── waybar-launch              # niri: Waybar with the full bar on one screen, slim ones elsewhere
-│       ├── waybar-thermal             # niri: Waybar's CPU temperature and fan speed
-│       └── xclip                      # niri: answers xclip from the Wayland clipboard
+│   ├── bin/
+│   │   ├── git-credential-bw          # git credential helper — HTTPS logins from the Bitwarden vault
+│   │   ├── ports                      # list / watch USB serial ports, share one on the network
+│   │   ├── column-width               # niri: Super+= / Super+- widen or narrow the column by 10%, capped at full width
+│   │   ├── battery-notify             # niri: low-battery warnings, power-saver at 20%
+│   │   ├── lock-screen                # niri: swaylock-effects, clock and second time zone over the wallpaper (PNG-cached)
+│   │   ├── osd                        # niri: volume / brightness keys, with a level pop-up
+│   │   ├── power-menu                 # niri: lock / suspend / log out / reboot / shut down, in fuzzel
+│   │   ├── waybar-calendar            # niri: Waybar's date and time, with a Monday-first calendar tooltip
+│   │   ├── wallpaper                  # niri: cycle the theme's wallpapers (Super+Alt+W); --fetch blurs the community ones
+│   │   ├── waybar-cast                # niri: Waybar's red pill while the screen is shared or recorded
+│   │   ├── waybar-io                  # niri: Waybar's disk readout, network speed in its tooltip
+│   │   ├── waybar-launch              # niri: Waybar with the full bar on one screen, slim ones elsewhere
+│   │   ├── waybar-thermal             # niri: Waybar's CPU temperature and fan speed
+│   │   └── xclip                      # niri: answers xclip from the Wayland clipboard
+│   └── share/
+│       └── gtksourceview-4/
+│           └── styles/
+│               └── {variant}.xml      # Text Editor's colours (gedit, GNOME Text Editor); linked into gtksourceview-4 and -5
 ├── .p10k.zsh
 ├── .ssh/
 │   ├── config                         # shared client settings, includes ~/.ssh/config.local first
