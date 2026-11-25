@@ -3880,7 +3880,10 @@ apply_theme() {
       "$DOTFILES/.config/fuzzel/${stub}.ini:$HOME/.config/fuzzel/fuzzel.ini:fuzzel theme → ${label}"
       "$DOTFILES/.config/mako/${stub}.conf:$HOME/.config/mako/config:mako theme → ${label}"
       "$DOTFILES/.config/swaylock/${stub}.conf:$HOME/.config/swaylock/config:swaylock theme → ${label}"
-      "$DOTFILES/.config/gtk-3.0/${stub}.css:$HOME/.config/gtk-3.0/gtk.css:GTK apps' colours → ${label}"
+      "$DOTFILES/.config/gtk-3.0/${stub}.css:$HOME/.config/gtk-3.0/colors.css:GTK apps' colours → ${label}"
+      # GTK 3 reads only gtk.css: the colours above and its fixes for adw-gtk3.
+      # It was the colours' link itself before, so it's relinked here too.
+      "$DOTFILES/.config/gtk-3.0/gtk.css:$HOME/.config/gtk-3.0/gtk.css:GTK 3 apps' styles"
       "$wp_target:$HOME/.config/niri/wallpaper:wallpaper → ${wp_target##*/}"
     )
   fi
@@ -4869,6 +4872,7 @@ cmd_clean() {
     "$HOME/.config/fuzzel/fuzzel.ini:$DOTFILES/.config/fuzzel/"
     "$HOME/.config/mako/config:$DOTFILES/.config/mako/"
     "$HOME/.config/swaylock/config:$DOTFILES/.config/swaylock/"
+    "$HOME/.config/gtk-3.0/colors.css:$DOTFILES/.config/gtk-3.0/"
     "$HOME/.config/gtk-3.0/gtk.css:$DOTFILES/.config/gtk-3.0/"
     "$HOME/.config/niri/wallpaper:$DOTFILES/.config/niri/wallpapers/"
     "$HOME/.config/niri/wallpaper:${XDG_DATA_HOME:-$HOME/.local/share}/wallpapers/"

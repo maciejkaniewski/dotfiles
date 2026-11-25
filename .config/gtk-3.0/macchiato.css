@@ -1,8 +1,8 @@
 /* Catppuccin Macchiato for GTK apps, as libadwaita's named colours: libadwaita apps
    (Files, Settings, Calculator, file pickers) draw with them, and so do GTK 3
    apps under the adw-gtk3 theme. The theme picker links
-   ~/.config/gtk-3.0/gtk.css here, and ~/.config/gtk-4.0/gtk.css imports it;
-   an app takes the colours when it next starts. */
+   ~/.config/gtk-3.0/colors.css here, and both GTK versions' gtk.css import
+   it; an app takes the colours when it next starts. */
 @define-color accent_color         #b7bdf8;
 @define-color accent_bg_color      #b7bdf8;
 @define-color accent_fg_color      #181926;

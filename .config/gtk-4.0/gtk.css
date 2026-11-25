@@ -1,6 +1,7 @@
 /* libadwaita apps (Files, Settings, Calculator, file pickers): the theme's
-   colours, shared with GTK 3 apps, then frosted like kitty. */
-@import url("../gtk-3.0/gtk.css");
+   colours, shared with GTK 3 apps (not their fixes in ../gtk-3.0/gtk.css), then
+   frosted like kitty. */
+@import url("../gtk-3.0/colors.css");
 
 /* Only the window's own background and the sidebar's are see-through, and
    niri blurs what's behind them (its rule for org.gnome.* apps). The named
