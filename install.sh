@@ -3818,6 +3818,48 @@ configure_identity() {
   install_profile_file "$profile" "$DOTFILES/.ssh/config.local.$profile" "$HOME/.ssh/config.local"
 }
 
+# The theme's per-machine symlinks in $HOME, each pointing at a repo file, as
+# "target:link:label" lines for stub $1 (label $2). apply_theme makes them and
+# verify_theme_links checks them, so the two read one list.
+theme_pointers() {
+  local stub="$1" label="$2"
+  local pointers=(
+    "$DOTFILES/.config/kitty/${stub}.conf:$HOME/.config/kitty/current-theme.conf:kitty theme → ${label}"
+    "$DOTFILES/.config/bat/config.${stub}:$HOME/.config/bat/config:bat theme → ${label}"
+    "$DOTFILES/.config/fzf/${stub}.sh:$HOME/.config/fzf/active.sh:fzf theme → ${label}"
+    "$DOTFILES/.config/eza/${stub}.yml:$HOME/.config/eza/theme.yml:eza theme → ${label}"
+    "$DOTFILES/.config/btop/themes/${stub}.theme:$HOME/.config/btop/themes/active.theme:btop theme → ${label}"
+    "$DOTFILES/.config/zsh-syntax-highlighting/${stub}.zsh:$HOME/.config/zsh-syntax-highlighting/active.zsh:zsh-syntax-highlighting theme → ${label}"
+    "$DOTFILES/.config/lazygit/${stub}.yml:$HOME/.config/lazygit/active-theme.yml:lazygit theme → ${label}"
+    "$DOTFILES/.config/p10k/${stub}.zsh:$HOME/.config/p10k/active.zsh:Powerlevel10k theme → ${label}"
+    "$DOTFILES/.config/yazi/${stub}.toml:$HOME/.config/yazi/theme.toml:yazi theme → ${label}"
+  )
+  # The niri session's own tools, only where --niri installed it.
+  if [[ -x "$NIRI_BIN" ]]; then
+    # The wallpaper: the theme's glow, unless one of the community wallpapers
+    # is picked (Super+Alt+W, .local/bin/wallpaper). Each variant has its own
+    # recoloured copy, so switching between variants of a family keeps the
+    # same picture in the new colours.
+    local wp_target wp_cur wp_store="${XDG_DATA_HOME:-$HOME/.local/share}/wallpapers"
+    wp_target="$DOTFILES/.config/niri/wallpapers/${stub}.svg"
+    wp_cur=$(readlink "$HOME/.config/niri/wallpaper" 2>/dev/null)
+    [[ "$wp_cur" == "$wp_store/"* && -f "$wp_store/$stub/${wp_cur##*/}" ]] && wp_target="$wp_store/$stub/${wp_cur##*/}"
+    pointers+=(
+      "$DOTFILES/.config/niri/${stub}.kdl:$HOME/.config/niri/theme.kdl:niri theme → ${label}"
+      "$DOTFILES/.config/waybar/${stub}.css:$HOME/.config/waybar/theme.css:Waybar theme → ${label}"
+      "$DOTFILES/.config/fuzzel/${stub}.ini:$HOME/.config/fuzzel/fuzzel.ini:fuzzel theme → ${label}"
+      "$DOTFILES/.config/mako/${stub}.conf:$HOME/.config/mako/config:mako theme → ${label}"
+      "$DOTFILES/.config/swaylock/${stub}.conf:$HOME/.config/swaylock/config:swaylock theme → ${label}"
+      "$DOTFILES/.config/gtk-3.0/${stub}.css:$HOME/.config/gtk-3.0/colors.css:GTK apps' colours → ${label}"
+      # GTK 3 reads only gtk.css: the colours above and its fixes for adw-gtk3.
+      # It was the colours' link itself before, so it's relinked here too.
+      "$DOTFILES/.config/gtk-3.0/gtk.css:$HOME/.config/gtk-3.0/gtk.css:GTK 3 apps' styles"
+      "$wp_target:$HOME/.config/niri/wallpaper:wallpaper → ${wp_target##*/}"
+    )
+  fi
+  printf '%s\n' "${pointers[@]}"
+}
+
 apply_theme() {
   local family="$1" variant="$2"
   local stub label delta_feature
@@ -3848,44 +3890,13 @@ apply_theme() {
     "$HOME/.config/btop/themes" "$HOME/.config/zsh-syntax-highlighting" "$HOME/.config/lazygit" \
     "$HOME/.config/p10k" "$HOME/.config/yazi"
 
-  # Each pointer is a per-machine symlink in $HOME pointing at a repo file.
-  local pointers=(
-    "$DOTFILES/.config/kitty/${stub}.conf:$HOME/.config/kitty/current-theme.conf:kitty theme → ${label}"
-    "$DOTFILES/.config/bat/config.${stub}:$HOME/.config/bat/config:bat theme → ${label}"
-    "$DOTFILES/.config/fzf/${stub}.sh:$HOME/.config/fzf/active.sh:fzf theme → ${label}"
-    "$DOTFILES/.config/eza/${stub}.yml:$HOME/.config/eza/theme.yml:eza theme → ${label}"
-    "$DOTFILES/.config/btop/themes/${stub}.theme:$HOME/.config/btop/themes/active.theme:btop theme → ${label}"
-    "$DOTFILES/.config/zsh-syntax-highlighting/${stub}.zsh:$HOME/.config/zsh-syntax-highlighting/active.zsh:zsh-syntax-highlighting theme → ${label}"
-    "$DOTFILES/.config/lazygit/${stub}.yml:$HOME/.config/lazygit/active-theme.yml:lazygit theme → ${label}"
-    "$DOTFILES/.config/p10k/${stub}.zsh:$HOME/.config/p10k/active.zsh:Powerlevel10k theme → ${label}"
-    "$DOTFILES/.config/yazi/${stub}.toml:$HOME/.config/yazi/theme.toml:yazi theme → ${label}"
-  )
-  # The niri session's own tools, only where --niri installed it.
+  local pointers
+  mapfile -t pointers < <(theme_pointers "$stub" "$label")
   if [[ -x "$NIRI_BIN" ]]; then
     mkdir -p "$HOME/.config/niri" "$HOME/.config/waybar" "$HOME/.config/fuzzel" \
       "$HOME/.config/mako" "$HOME/.config/swaylock" "$HOME/.config/gtk-3.0"
-    # The wallpaper: the theme's glow, unless one of the community wallpapers
-    # is picked (Super+Alt+W, .local/bin/wallpaper). Each variant has its own
-    # recoloured copy, so switching between variants of a family keeps the
-    # same picture in the new colours. The link was wallpaper.svg before
-    # those existed; the old one goes.
-    local wp_target wp_cur wp_store="${XDG_DATA_HOME:-$HOME/.local/share}/wallpapers"
-    wp_target="$DOTFILES/.config/niri/wallpapers/${stub}.svg"
-    wp_cur=$(readlink "$HOME/.config/niri/wallpaper" 2>/dev/null)
-    [[ "$wp_cur" == "$wp_store/"* && -f "$wp_store/$stub/${wp_cur##*/}" ]] && wp_target="$wp_store/$stub/${wp_cur##*/}"
+    # The wallpaper's link was wallpaper.svg before the per-variant copies.
     [[ -L "$HOME/.config/niri/wallpaper.svg" ]] && rm -f "$HOME/.config/niri/wallpaper.svg"
-    pointers+=(
-      "$DOTFILES/.config/niri/${stub}.kdl:$HOME/.config/niri/theme.kdl:niri theme → ${label}"
-      "$DOTFILES/.config/waybar/${stub}.css:$HOME/.config/waybar/theme.css:Waybar theme → ${label}"
-      "$DOTFILES/.config/fuzzel/${stub}.ini:$HOME/.config/fuzzel/fuzzel.ini:fuzzel theme → ${label}"
-      "$DOTFILES/.config/mako/${stub}.conf:$HOME/.config/mako/config:mako theme → ${label}"
-      "$DOTFILES/.config/swaylock/${stub}.conf:$HOME/.config/swaylock/config:swaylock theme → ${label}"
-      "$DOTFILES/.config/gtk-3.0/${stub}.css:$HOME/.config/gtk-3.0/colors.css:GTK apps' colours → ${label}"
-      # GTK 3 reads only gtk.css: the colours above and its fixes for adw-gtk3.
-      # It was the colours' link itself before, so it's relinked here too.
-      "$DOTFILES/.config/gtk-3.0/gtk.css:$HOME/.config/gtk-3.0/gtk.css:GTK 3 apps' styles"
-      "$wp_target:$HOME/.config/niri/wallpaper:wallpaper → ${wp_target##*/}"
-    )
   fi
 
   for entry in "${pointers[@]}"; do
@@ -4434,6 +4445,21 @@ verify_symlinks() {
   echo 'no dangling links in ~/.local/bin, /usr/local/bin or /opt'
 }
 
+# Only --theme (or --link) makes the theme's links, so a pull that adds one
+# leaves it missing here until then.
+verify_theme_links() {
+  local stub; stub=$(theme_stub)
+  [[ -n "$stub" ]] || { echo 'no theme picked (run --theme)'; return 1; }
+  local entry target link n=0 bad=""
+  while IFS= read -r entry; do
+    target="${entry%%:*}"; link="${entry#*:}"; link="${link%%:*}"
+    n=$(( n + 1 ))
+    [[ -e "$link" && "$(readlink -f "$link")" == "$(readlink -f "$target")" ]] || bad+="${link#"$HOME/"} "
+  done < <(theme_pointers "$stub" "")
+  [[ -z "$bad" ]] || { echo "not on $stub: ${bad% } (run --theme)"; return 1; }
+  echo "$n links on $stub"
+}
+
 # install.sh is ~3,800 lines of bash that nothing else exercises line by line, so
 # lint it here, with the shell scripts in .local/bin: a bug like
 # `local a="$1" b="$a"` passes bash -n and every smoke test, and just quietly
@@ -4609,6 +4635,7 @@ verify_install() {
   vcheck "CLI tools"         verify_cli_tools
   vcheck "zsh plugins"       verify_zsh_plugins
   vcheck "symlinks"          verify_symlinks
+  vcheck "theme links"       verify_theme_links
   vcheck "serial ports"      verify_serial_access
   vcheck "ser2net"           verify_ser2net
   epp_rule_wanted && vcheck "CPU power rule" verify_amd_epp
