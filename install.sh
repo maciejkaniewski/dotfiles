@@ -515,15 +515,23 @@ link_parts() {
 # Claude Code writes /model, /config and theme changes into
 # ~/.claude/settings.json, so symlinking that file into the repo kept dirtying
 # the repo with per-machine choices. The repo now holds only the stable part
-# (.claude/settings.base.json: env, hooks, status line, plugins) and this
-# overlays it onto the live file as a plain local file. Keys the repo doesn't
-# set (model, effort, theme, permissions, ...) stay exactly as that machine has
-# them; keys it does set win, so changing a hook means editing the repo file and
-# re-running install. A legacy symlink is replaced by its contents, or by just
+# (.claude/settings.base.json with env, permissions, hooks, status line and
+# plugins) and this overlays it onto the live file as a plain local file. Keys
+# the repo doesn't set (model, effort, theme, ...) stay exactly as that machine
+# has them, and keys it does set win, so changing a hook means editing the repo
+# file and re-running install. The permission lists are the exception. They are
+# unioned, so a rule added on one machine, or by another layer merged into the
+# same file, is kept. A legacy symlink is replaced by its contents, or by just
 # the base when it dangles (the repo file it pointed at no longer exists).
 merge_claude_settings() {
   local base="$DOTFILES/.claude/settings.base.json" dst="$HOME/.claude/settings.json"
   local name="${dst#"$HOME/"}" live merged tmp
+  local union='.[0] as $live | .[1] as $repo | ($live * $repo)
+    | reduce ("allow", "deny", "ask") as $k (.;
+        if ($repo.permissions[$k] | type) == "array"
+        then .permissions[$k] = ($live.permissions[$k] // [])
+                                + ($repo.permissions[$k] - ($live.permissions[$k] // []))
+        else . end)'
   [[ -f "$base" ]] || return
   command_exists jq || { log_error "$name" "jq is required to merge the Claude settings (run --setup)"; return; }
   mkdir -p "$(dirname "$dst")"
@@ -534,7 +542,7 @@ merge_claude_settings() {
   jq -e 'type == "object"' <<<"$live" &>/dev/null \
     || { log_error "$name" "is not a JSON object — fix or remove it, then re-run"; return; }
 
-  merged=$(jq -s '.[0] * .[1]' <(printf '%s' "$live") "$base") \
+  merged=$(jq -s "$union" <(printf '%s' "$live") "$base") \
     || { log_error "$name" "merge failed"; return; }
 
   if [[ -f "$dst" && ! -L "$dst" ]] && [[ "$(jq -S . "$dst")" == "$(jq -S . <<<"$merged")" ]]; then

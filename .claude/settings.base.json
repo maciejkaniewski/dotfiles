@@ -26,6 +26,46 @@
   },
   "enabledPlugins": {
     "clangd-lsp@claude-plugins-official": true,
-    "rust-analyzer-lsp@claude-plugins-official": true
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "lua-lsp@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Skill(update-config)"
+    ],
+    "deny": [
+      "Bash(git add -A*)",
+      "Bash(git add --all*)",
+      "Bash(git add .)",
+      "Bash(git add . *)",
+      "Bash(git commit -a*)",
+      "Bash(git -C * add -A*)",
+      "Bash(git -C * add --all*)",
+      "Bash(git -C * add .)",
+      "Bash(git -C * add . *)",
+      "Bash(git -C * commit -a*)",
+      "Bash(git push --force)",
+      "Bash(git push --force *)",
+      "Bash(git push -f)",
+      "Bash(git push -f *)",
+      "Bash(git push * --force)",
+      "Bash(git push * --force *)",
+      "Bash(git push * -f)",
+      "Bash(git push * -f *)",
+      "Bash(git -C * push --force)",
+      "Bash(git -C * push --force *)",
+      "Bash(git -C * push -f)",
+      "Bash(git -C * push -f *)",
+      "Bash(git -C * push * --force)",
+      "Bash(git -C * push * --force *)",
+      "Bash(git -C * push * -f)",
+      "Bash(git -C * push * -f *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git -C * push *)",
+      "Bash(git merge *)",
+      "Bash(git -C * merge *)"
+    ]
   }
 }
