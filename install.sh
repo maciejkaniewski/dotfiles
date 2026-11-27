@@ -487,6 +487,8 @@ LINKS=(
   "Neovim|$DOTFILES/.config/nvim/lua:$HOME/.config/nvim/lua"
   "Claude|$DOTFILES/.claude/statusline-git.sh:$HOME/.claude/statusline-git.sh"
   "Claude|$DOTFILES/.claude/nvim-checktime.sh:$HOME/.claude/nvim-checktime.sh"
+  "Claude|$DOTFILES/.claude/CLAUDE.md:$HOME/.claude/CLAUDE.md"
+  "Claude|$DOTFILES/.claude/skills/handoff:$HOME/.claude/skills/handoff"
   "Utilities|$DOTFILES/.config/bat/themes:$HOME/.config/bat/themes"
   "Utilities|$DOTFILES/.config/delta/catppuccin.gitconfig:$HOME/.config/delta/catppuccin.gitconfig"
   "Utilities|$DOTFILES/.config/delta/gruvbox.gitconfig:$HOME/.config/delta/gruvbox.gitconfig"
